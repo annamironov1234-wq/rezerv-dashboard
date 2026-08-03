@@ -72,6 +72,7 @@
   .collapsible.hidden{display:none}
   .scroll{overflow-x:auto}
   table{border-collapse:collapse;width:100%;min-width:600px;font-variant-numeric:tabular-nums}
+  table.narrow{min-width:0}
   th,td{padding:.6rem .95rem;text-align:right;white-space:nowrap;font-size:.96rem}
   th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--surface);z-index:2;box-shadow:1px 0 0 var(--line)}
   thead th{font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;background:var(--surface-2);border-bottom:1px solid var(--line)}
@@ -146,6 +147,18 @@
   .legend span{display:inline-flex;align-items:center;gap:.3rem}
   .dot{width:.6rem;height:.6rem;border-radius:2px}
   .err{padding:2rem;text-align:center;color:var(--crimson);font-weight:600}
+  @media(max-width:640px){
+    th,td{padding:.5rem .55rem;font-size:.82rem}
+    tr.sub td{font-size:.72rem}
+    .kpi .val{font-size:1.5rem}
+    .kpi{padding:.7rem .75rem}
+    td.lvl1:first-child{padding-left:1.3rem}
+    td.lvl2:first-child{padding-left:2.1rem}
+    tr.sub td:first-child{padding-left:1.2rem}
+    .filters{gap:.4rem}
+    .filters .sel{flex:1 1 45%;min-width:0}
+    .wrap,main{padding-left:.7rem;padding-right:.7rem}
+  }
 </style>
 </head>
 <body>
@@ -239,16 +252,20 @@ function setupTabs(){
 function initFilters(d){
   const bar=document.getElementById('filters');
   const ipSel=el('select','sel'); ipSel.id='f-ip'; ['Все','Миронов','Молчанов'].forEach(v=>ipSel.append(new Option('ИП: '+v,v)));
+  const mSel=el('select','sel'); mSel.id='f-month'; mSel.append(new Option('Период: весь','all'));
+  (d.pnl['Все'].months||[]).forEach(m=>mSel.append(new Option('Месяц: '+MONN[m.slice(5)]+' '+m.slice(0,4)+(m===d.incomplete_month?' •':''),m)));
   const obSel=el('select','sel'); obSel.id='f-obj'; obSel.append(new Option('Клиент: Все','Все'));
   (d.revenue_by_object||[]).forEach(r=>obSel.append(new Option(r.obj.replace(/\s*\(\d+\).*/,''),r.obj)));
-  ipSel.value=CUR.ip; obSel.value=CUR.obj;
+  ipSel.value=CUR.ip; obSel.value=CUR.obj; mSel.value=PNL_MONTH;
   ipSel.onchange=()=>{CUR.ip=ipSel.value;draw();};
+  mSel.onchange=()=>{PNL_MONTH=mSel.value;draw();};
   obSel.onchange=()=>{CUR.obj=obSel.value;draw();};
-  bar.append(ipSel,obSel);
+  bar.append(ipSel,mSel,obSel);
 }
 
 const MONN={'01':'Янв','02':'Фев','03':'Мар','04':'Апр','05':'Май','06':'Июн','07':'Июл','08':'Авг','09':'Сен','10':'Окт','11':'Ноя','12':'Дек'};
 let INCOMPLETE='';
+let PNL_MONTH='all';
 const mlab=m=>(MONN[m.slice(5)]||m)+(m===INCOMPLETE?' •':'');
 function periodLabel(months){ if(!months||!months.length)return ''; const a=months[0],b=months[months.length-1];
   return MONN[a.slice(5)]+' – '+MONN[b.slice(5)]+' '+b.slice(0,4); }
@@ -259,6 +276,7 @@ function draw(){
   const filters=document.getElementById('filters');
   filters.style.display = (PAGE==='pnl'||PAGE==='debt') ? '' : 'none';
   const objSel=document.getElementById('f-obj'); if(objSel) objSel.style.display=(PAGE==='pnl')?'':'none';
+  const mSel=document.getElementById('f-month'); if(mSel) mSel.style.display=(PAGE==='pnl'&&CUR.obj==='Все'&&CUR.ip==='Все')?'':'none';
   const per=periodLabel(d.pnl['Все'].months);
   document.querySelector('.meta span').innerHTML='Период: <b>'+per+'</b>'+
     (INCOMPLETE?' · <span class="warn-inline">'+(MONN[INCOMPLETE.slice(5)]||'')+' • неполный месяц</span>':'');
@@ -750,27 +768,15 @@ function drawClient(d, obj){
 }
 
 function render(d, p){
-  const months = p.months;
-  const mLabels = months.map(m=>({'01':'Янв','02':'Фев','03':'Мар','04':'Апр','05':'Май','06':'Июн','07':'Июл','08':'Авг','09':'Сен','10':'Окт','11':'Ноя','12':'Дек'}[m.slice(5)]||m));
+  const single = PNL_MONTH!=='all' && p.months.includes(PNL_MONTH);
+  const M = single ? PNL_MONTH : null;
+  const months = single ? [M] : p.months;
+  const mLabels = months.map(m=>(MONN[m.slice(5)]||m)+(m===INCOMPLETE?' •':''));
   // meta
   document.getElementById('meta-right').innerHTML =
     'данные на '+d.updated_at+' · '+(d.reconciled?'<span class="ok">сверка ✓</span>':'<span class="warn">сверка не сошлась</span>');
 
   const app = document.getElementById('app'); app.innerHTML='';
-
-  // KPI
-  const kp = el('div','kpis');
-  const kpi=(lab,val,unit,sub,acc)=>{const k=el('div','kpi'+(acc?' accent':''));
-    k.innerHTML=`<div class="lab">${lab}</div><div class="val">${val} <small>${unit}</small></div><div class="sub">${sub||''}</div>`;return k;};
-  kp.append(
-    kpi('Выручка без НДС', fmt(p.revenue.total),'тыс ₽',periodLabel(p.months),true),
-    kpi('Маржинальная прибыль', fmt(p.margin),'тыс ₽','выручка − переменные расходы · '+(p.margin_pct*100).toFixed(0)+'%'),
-    kpi('EBITDA', fmt(p.ebitda),'тыс ₽','маржа − постоянные расходы'),
-    kpi('Чистая прибыль', fmt(p.net),'тыс ₽','EBITDA − налоги'),
-  );
-  app.append(kp);
-
-  const maincol=app;   // таблица на всю ширину
 
   // helpers
   const perMonth=fn=>{const o={};months.forEach(m=>o[m]=fn(m));return o;};
@@ -779,6 +785,26 @@ function render(d, p){
   const marginM=m=>(p.revenue.months[m]||0)-sumVars(m);
   const ebitdaM=m=>marginM(m)-sumFixed(m);
   const netM=m=>ebitdaM(m)-(p.tax.months[m]||0);
+
+  // KPI (за период или за выбранный месяц)
+  const kRev = single ? (p.revenue.months[M]||0) : p.revenue.total;
+  const kMarg = single ? marginM(M) : p.margin;
+  const kMpct = single ? (kRev?kMarg/kRev:0) : p.margin_pct;
+  const kEbit = single ? ebitdaM(M) : p.ebitda;
+  const kNet = single ? netM(M) : p.net;
+  const kPer = single ? (MONN[M.slice(5)]+' '+M.slice(0,4)+(M===INCOMPLETE?' • неполный':'')) : periodLabel(p.months);
+  const kp = el('div','kpis');
+  const kpi=(lab,val,unit,sub,acc)=>{const k=el('div','kpi'+(acc?' accent':''));
+    k.innerHTML=`<div class="lab">${lab}</div><div class="val">${val} <small>${unit}</small></div><div class="sub">${sub||''}</div>`;return k;};
+  kp.append(
+    kpi('Выручка без НДС', fmt(kRev),'тыс ₽',kPer,true),
+    kpi('Маржинальная прибыль', fmt(kMarg),'тыс ₽','выручка − переменные · '+(kMpct*100).toFixed(0)+'%'),
+    kpi('EBITDA', fmt(kEbit),'тыс ₽','маржа − постоянные расходы'),
+    kpi('Чистая прибыль', fmt(kNet),'тыс ₽','EBITDA − налоги'),
+  );
+  app.append(kp);
+
+  const maincol=app;   // таблица на всю ширину
   const vget=name=>p.variables.find(r=>r.name===name)||{months:{},total:0};
   const WK=['Наличка (рабочие)','Самозанятые (рабочие)','Бригадирские','Премии исполнителям'];
   const workersMonth=m=>WK.reduce((s,n)=>s+(vget(n).months[m]||0),0);
@@ -803,10 +829,10 @@ function render(d, p){
   rows.push({cls:'vat',lvl:0,name:p.vat.name,months:p.vat.months,total:p.vat.total});
 
   // таблица
-  const card=el('div','card'); card.append(el('div','hd','<h2>Классический P&L · Все объекты</h2><span class="note">тыс ₽, помесячно</span>'));
-  const sc=el('div','scroll'); const tb=el('table');
+  const card=el('div','card'); card.append(el('div','hd',`<h2>Классический P&L · Все объекты</h2><span class="note">тыс ₽, ${single?MONN[M.slice(5)]+' '+M.slice(0,4):'помесячно'}</span>`));
+  const sc=el('div','scroll'); const tb=el('table', single?'narrow':null);
   const thead=el('thead'),hr=el('tr'); hr.append(el('th',null,'Статья'));
-  mLabels.forEach(l=>hr.append(el('th',null,l))); hr.append(el('th',null,'Итого')); thead.append(hr); tb.append(thead);
+  mLabels.forEach(l=>hr.append(el('th',null,l))); if(!single) hr.append(el('th',null,'Итого')); thead.append(hr); tb.append(thead);
   const body=el('tbody'); tb.append(body);
   const clsMap={rev:'rev',grp:'grp',taxg:'grp',subgroup:'subgroup',sub:'sub',total:'total',pct:'sub',ebitda:'ebitda',net:'net',vat:'vat'};
   rows.forEach(r=>{
@@ -817,11 +843,11 @@ function render(d, p){
     tr.append(ntd);
     if(r.cls==='pct'){
       months.forEach(m=>{const rev=p.revenue.months[m]||0;tr.append(el('td','pct',rev?Math.round(marginM(m)/rev*100)+'%':'—'));});
-      tr.append(el('td','pct',(p.margin_pct*100).toFixed(0)+'%'));
+      if(!single) tr.append(el('td','pct',(p.margin_pct*100).toFixed(0)+'%'));
     }else{
       months.forEach((m,i)=>{const v=(r.months&&r.months[m])||0;const td=el('td',r.neg&&v?'neg':null,v?fmt(v):'0');
         if(i>0&&r.months){const ts=monthTrendSpan(v, r.months[months[i-1]]||0); if(ts)td.append(ts);} tr.append(td);});
-      tr.append(el('td',r.neg&&r.total?'neg':null,fmt(r.total||0)));
+      if(!single) tr.append(el('td',r.neg&&r.total?'neg':null,fmt(r.total||0)));
     }
     body.append(tr);
   });
@@ -844,7 +870,8 @@ function render(d, p){
   // графики — полноширинной секцией снизу, свёрнуты по умолчанию
   const cbtn=el('button','btn-charts','▾ Показать графики'); app.append(cbtn);
   const cwrap=el('div','charts-full'); cwrap.style.display='none'; app.append(cwrap);
-  cwrap.append(buildChart(p, months, mLabels));
+  const fullLabels=p.months.map(m=>(MONN[m.slice(5)]||m)+(m===INCOMPLETE?' •':''));
+  cwrap.append(buildChart(p, p.months, fullLabels));
   cwrap.append(buildClientChart(d.revenue_by_object||[]));
   cbtn.onclick=()=>{const open=cwrap.style.display==='none';cwrap.style.display=open?'':'none';cbtn.textContent=open?'▴ Скрыть графики':'▾ Показать графики';};
 }
