@@ -44,6 +44,27 @@ def main():
         print(f"[СВЕРКА] Выручка янв–июн {janjun:,.0f} != контроль {CONTROL_REVENUE_JANJUN:,.0f} (разница {diff:,.0f})",
               file=sys.stderr)
 
+    # --- авто-заглушки: система сама себя охраняет (чтобы Анне не держать это в голове) ---
+    warnings = []
+    clients = getattr(inc, "client_objects", [])
+    active_clients = []
+    for o in clients:
+        rev_o = inc.revenue(per[0], per[1], obj=o)   # выручка объекта за период
+        if rev_o <= 0:
+            continue                                   # пустой/архивный/будущий лист — не тревожим
+        active_clients.append(o)
+        if o not in C.KNOWN_OBJECTS:
+            warnings.append(f"Новый клиент «{o}» (выручка {rev_o:,.0f} ₽) — включён в расчёт, ИП по умолчанию "
+                            f"«{C.ip_of(o)}». Скажите Клоду, чтобы подтвердить ИП и настройки объекта.")
+    if not active_clients:
+        warnings.append("Не найдено ни одного листа-клиента в таблице — возможно, изменилась структура "
+                        "или сменился год в названиях листов. Нужна проверка.")
+    if not reconciled:
+        warnings.append(f"Контроль янв–июн не сошёлся: {janjun:,.0f} вместо {CONTROL_REVENUE_JANJUN:,.0f}. "
+                        f"Похоже, поменялась структура таблицы — цифрам пока не доверять, нужна проверка.")
+    for w in warnings:
+        print("[ЗАГЛУШКА] " + w, file=sys.stderr)
+
     # выручка по объектам (янв–июн) для графика и фильтра «по клиентам»
     rev_by_obj, rev_obj_monthly = [], {}
     months = p.months
@@ -84,6 +105,8 @@ def main():
         "expense_txns": txns_by_disp,
         "managers_month": managers_month,
         "reconciled": reconciled,
+        "warnings": warnings,
+        "known_clients": sorted(active_clients),
         "control_revenue": CONTROL_REVENUE_JANJUN,
         "unit": "тыс ₽",
         "pnl": {ip: pnl[ip].to_dict() for ip in pnl},

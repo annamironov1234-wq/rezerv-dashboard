@@ -75,7 +75,9 @@
   .collapsible.hidden{display:none}
   .scroll{overflow-x:auto}
   table{border-collapse:collapse;width:100%;min-width:600px;font-variant-numeric:tabular-nums}
-  table.narrow{min-width:0}
+  table.narrow{min-width:0;width:auto}
+  table.narrow td,table.narrow th{padding-right:1.1rem}
+  table.narrow td:first-child,table.narrow th:first-child{padding-right:1.6rem}
   th,td{padding:.6rem .95rem;text-align:right;white-space:nowrap;font-size:.96rem}
   th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--surface);z-index:2;box-shadow:1px 0 0 var(--line)}
   thead th{font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;background:var(--surface-2);border-bottom:1px solid var(--line)}
@@ -150,6 +152,11 @@
   .legend span{display:inline-flex;align-items:center;gap:.3rem}
   .dot{width:.6rem;height:.6rem;border-radius:2px}
   .err{padding:2rem;text-align:center;color:var(--crimson);font-weight:600}
+  #alerts{margin:.2rem 0 .6rem}
+  .alert{background:#fff4d6;border:1px solid #ffcf5a;border-left:5px solid #e0a400;border-radius:8px;padding:.7rem 1rem;color:#5a4300;font-size:.86rem}
+  .alert b{color:#7a5b00}
+  .alert ul{margin:.35rem 0 0;padding-left:1.1rem}
+  .alert li{margin:.15rem 0}
   @media(max-width:640px){
     th,td{padding:.5rem .55rem;font-size:.82rem}
     tr.sub td{font-size:.72rem}
@@ -174,6 +181,7 @@
 </div></div>
 
 <div class="wrap">
+  <div id="alerts"></div>
   <div class="tabs">
     <div class="tab active" data-page="pnl">P&amp;L</div>
     <div class="tab" data-page="debt">Дебиторка</div>
@@ -271,8 +279,19 @@ const mlab=m=>(MONN[m.slice(5)]||m)+(m===INCOMPLETE?' •':'');
 function periodLabel(months){ if(!months||!months.length)return ''; const a=months[0],b=months[months.length-1];
   return MONN[a.slice(5)]+' – '+MONN[b.slice(5)]+' '+b.slice(0,4); }
 
+function renderAlerts(d){
+  const box=document.getElementById('alerts'); if(!box) return;
+  const w=[...(d.warnings||[])];
+  const m=(d.updated_at||'').match(/(\d{2})\.(\d{2})\.(\d{4})/);   // протухание — по дате устройства
+  if(m){ const upd=new Date(+m[3],+m[2]-1,+m[1]); const days=Math.floor((Date.now()-upd)/86400000);
+    if(days>=4) w.push('Данные не обновлялись '+days+' дн. — возможно, робот потерял доступ к таблицам. Напишите Клоду.'); }
+  box.innerHTML = w.length
+    ? '<div class="alert"><b>⚠️ Требует внимания:</b><ul>'+w.map(x=>'<li>'+x+'</li>').join('')+'</ul></div>' : '';
+}
+
 function draw(){
   const d=DATA;
+  renderAlerts(d);
   document.getElementById('meta-right').innerHTML='данные на '+d.updated_at+' · '+(d.reconciled?'<span class="ok">сверка ✓</span>':'<span class="warn">сверка не сошлась</span>');
   const filters=document.getElementById('filters');
   filters.style.display = (PAGE==='pnl'||PAGE==='debt') ? '' : 'none';
@@ -392,7 +411,7 @@ function drawExpenses(d){
   app.append(kp);
 
   const card=el('div','card'); card.append(el('div','hd','<h2>Расходы — детализация</h2><span class="note">'+(pct?'% от выручки':'тыс ₽')+' · «＋» раскрыть · клик по статье → выплаты</span>'));
-  const sc=el('div','scroll'),tb=el('table'),thead=el('thead'),hr=el('tr');
+  const sc=el('div','scroll'),tb=el('table', showTotal?null:'narrow'),thead=el('thead'),hr=el('tr');
   hr.append(el('th',null,'Статья'));
   showMonths.forEach(m=>hr.append(el('th',null,mlab(m))));
   if(showTotal)hr.append(el('th',null,'Итого'));
@@ -426,7 +445,7 @@ function drawExpenses(d){
 
   // НДС — отдельным справочным блоком внизу
   const vcard=el('div','card'); vcard.append(el('div','hd','<h2>Справочно: НДС</h2><span class="note">не входит в расходы выше</span>'));
-  const vsc=el('div','scroll'),vtb=el('table'),vth=el('thead'),vhr=el('tr');
+  const vsc=el('div','scroll'),vtb=el('table', showTotal?null:'narrow'),vth=el('thead'),vhr=el('tr');
   vhr.append(el('th',null,'НДС')); showMonths.forEach(m=>vhr.append(el('th',null,mlab(m)))); if(showTotal)vhr.append(el('th',null,'Итого'));
   vth.append(vhr);vtb.append(vth);const vbody=el('tbody');vtb.append(vbody);
   [[P.vat_charged],[P.vat]].forEach(([row])=>{

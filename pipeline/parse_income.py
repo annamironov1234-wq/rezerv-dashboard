@@ -38,6 +38,7 @@ class IncomeData:
         # история ставок: obj -> смена -> month -> [Σ(ставка клиента×часы), Σ(ставка рабоч×часы), Σчасы]
         self.rates = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [0.0, 0.0, 0.0])))
         self.receivables = []   # [{obj, оплачено, оказано, дебиторка, ндс}]
+        self.client_objects = []  # имена всех распознанных листов-клиентов (для авто-детекта новых)
 
     def revenue(self, frm, to, obj=None, ip=None):
         total = 0.0
@@ -82,16 +83,22 @@ def parse_income(path=None):
     d = IncomeData()
 
     for nm in wb.sheetnames:
-        if "(26)" not in nm and nm != "Клемер":
-            continue
         ws = wb[nm]
         H = {str(c.value).strip().lower(): j for j, c in enumerate(ws[1]) if c.value}
+        # лист-клиент опознаём по СИГНАТУРЕ (столбцы выручки), а не по «(26)» —
+        # так авто-подхватываются новые клиенты и смена года в названиях листов.
+        is_client = any(k == "сумма услуг" for k in H) and any("дата услуг от" in k for k in H)
+        if any(s in nm.lower() for s in C.NON_CLIENT_SHEETS):
+            is_client = False
+        if not is_client:
+            continue
+        obj = nm.strip()
+        d.client_objects.append(obj)
         def col(pred):
             for k, j in H.items():
                 if pred(k):
                     return j
             return None
-        obj = nm.strip()
 
         # --- блок счетов: выручка (Сумма услуг) + дебиторка (Недоплата) ---
         iL = col(lambda k: "дата услуг от" in k)
