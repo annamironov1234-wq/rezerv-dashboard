@@ -1,0 +1,5 @@
+gspread
+google-auth
+google-auth-httplib2
+requests
+openpyxl

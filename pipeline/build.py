@@ -1,0 +1,100 @@
+"""Точка входа: собрать P&L -> build/data.json + метка времени + сверка.
+Запуск: python -m dashboard.pipeline.build (из корня клиента) или python -m pipeline.build."""
+import json, datetime, sys
+from pathlib import Path
+from .pnl import build_pnl
+from .parse_income import parse_income
+from .parse_expenses import parse_expenses
+from .parse_salary import parse_salary
+from . import config as C
+
+CONTROL_REVENUE_JANJUN = 130312854   # контроль сверки (метод согласован)
+OUT = C.DASH / "build" / "data.json"
+
+
+def main():
+    inc, exp, sal = parse_income(), parse_expenses(), parse_salary()
+    now = datetime.datetime.now()
+    cur_month = f"{now.year:04d}-{now.month:02d}"      # текущий (идущий) месяц
+    per = ("2026-01", cur_month)                        # период до текущего месяца включительно
+    pnl = {ip: build_pnl(period=per, ip=ip, inc=inc, exp=exp, sal=sal)
+           for ip in ("Все", "Миронов", "Молчанов")}
+    p = pnl["Все"]
+
+    # --- сверка: янв–июн должны остаться = 130 312 854 (инвариант независимо от июля) ---
+    janjun = inc.revenue("2026-01", "2026-06")
+    diff = round(janjun) - CONTROL_REVENUE_JANJUN
+    reconciled = (diff == 0)
+    if not reconciled:
+        print(f"[СВЕРКА] Выручка янв–июн {janjun:,.0f} != контроль {CONTROL_REVENUE_JANJUN:,.0f} (разница {diff:,.0f})",
+              file=sys.stderr)
+
+    # выручка по объектам (янв–июн) для графика и фильтра «по клиентам»
+    rev_by_obj, rev_obj_monthly = [], {}
+    months = p.months
+    for o, mm in inc.rev_obj_month.items():
+        t = sum(v for m, v in mm.items() if "2026-01" <= m <= "2026-06")
+        if t:
+            rev_by_obj.append({"obj": o, "total": t, "ip": C.ip_of(o)})
+            rev_obj_monthly[o] = {m: mm.get(m, 0.0) for m in months}
+    rev_by_obj.sort(key=lambda x: -x["total"])
+
+    # выплаты по статьям (для страницы «Расходы — детализация»)
+    from collections import defaultdict
+    txns_by_disp = defaultdict(list)
+    for t in (exp.txns + sal.txns):
+        if per[0] <= t["ym"] <= per[1]:
+            txns_by_disp[t["disp"]].append(t)
+    for k in txns_by_disp:
+        txns_by_disp[k].sort(key=lambda x: x["date"])
+
+    # ФОТ менеджеров по месяцам (оклад/премия/добавка) — для раскрытия
+    managers_month = {m: {k: v for k, v in dd.items()} for m, dd in exp.mgr_month.items()}
+
+    # оплата рабочим по объектам выручки (для P&L по объектам): {rev_obj:{kind:{month:v}}}
+    worker_obj = {}
+    for kind, objs in sal.by_kind_obj_month.items():
+        for so, mm in objs.items():
+            rev = C.salary_obj_to_rev(so)
+            if not rev:
+                continue
+            k = worker_obj.setdefault(rev, {}).setdefault(kind, {})
+            for m, v in mm.items():
+                if per[0] <= m <= per[1]:
+                    k[m] = k.get(m, 0.0) + v
+
+    data = {
+        "updated_at": now.strftime("%d.%m.%Y %H:%M"),
+        "incomplete_month": cur_month,     # текущий месяц — неполный, подсветить
+        "expense_txns": txns_by_disp,
+        "managers_month": managers_month,
+        "reconciled": reconciled,
+        "control_revenue": CONTROL_REVENUE_JANJUN,
+        "unit": "тыс ₽",
+        "pnl": {ip: pnl[ip].to_dict() for ip in pnl},
+        "pnl_all": p.to_dict(),
+        "objects": [r["obj"] for r in rev_by_obj],
+        "revenue_by_object": rev_by_obj,
+        "revenue_obj_monthly": rev_obj_monthly,
+        "worker_obj_monthly": worker_obj,
+        "transport_obj_monthly": {o: {m: v for m, v in mm.items() if per[0] <= m <= per[1]}
+                                  for o, mm in inc.transport_obj_month.items()},
+        "hours_obj_monthly": {o: {m: v for m, v in mm.items() if per[0] <= m <= per[1]}
+                              for o, mm in inc.hours_obj_month.items()},
+        "workcost_obj_monthly": {o: {m: v for m, v in mm.items() if per[0] <= m <= per[1]}
+                                 for o, mm in inc.workcost_obj_month.items()},
+        "rates_obj": {o: {sm: {m: {"cr": c[0]/c[2], "wr": (c[1]/c[2] if c[1] else 0), "hrs": c[2]}
+                               for m, c in mm.items() if per[0] <= m <= per[1] and c[2]}
+                          for sm, mm in sms.items()}
+                      for o, sms in inc.rates.items()},
+        "receivables": [{**r, "ip": C.ip_of(r["obj"])} for r in inc.receivables],
+    }
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"OK -> {OUT}")
+    print(f"   Выручка {p.revenue:,.0f} | Маржа {p.margin:,.0f} ({p.margin_pct:.1%}) | "
+          f"EBITDA {p.ebitda:,.0f} | Чистая {p.net:,.0f} | сверка: {'OK' if reconciled else 'РАСХОЖДЕНИЕ'}")
+
+
+if __name__ == "__main__":
+    main()

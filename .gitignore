@@ -1,0 +1,10 @@
+.secrets/
+data/
+build/
+dist/
+docs/
+sessions/
+knowledge-base/
+__pycache__/
+*.pyc
+.DS_Store
