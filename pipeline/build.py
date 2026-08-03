@@ -14,7 +14,8 @@ OUT = C.DASH / "build" / "data.json"
 
 def main():
     inc, exp, sal = parse_income(), parse_expenses(), parse_salary()
-    now = datetime.datetime.now()
+    MSK = datetime.timezone(datetime.timedelta(hours=3))
+    now = datetime.datetime.now(MSK)                    # московское время (GitHub работает в UTC)
     cur_month = f"{now.year:04d}-{now.month:02d}"      # текущий (идущий) месяц
     per = ("2026-01", cur_month)                        # период до текущего месяца включительно
 
@@ -78,7 +79,7 @@ def main():
                     k[m] = k.get(m, 0.0) + v
 
     data = {
-        "updated_at": now.strftime("%d.%m.%Y %H:%M"),
+        "updated_at": now.strftime("%d.%m.%Y %H:%M") + " МСК",
         "incomplete_month": cur_month,     # текущий месяц — неполный, подсветить
         "expense_txns": txns_by_disp,
         "managers_month": managers_month,
