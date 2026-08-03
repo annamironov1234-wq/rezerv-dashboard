@@ -54,11 +54,19 @@ def main():
             continue                                   # пустой/архивный/будущий лист — не тревожим
         active_clients.append(o)
         if o not in C.KNOWN_OBJECTS:
-            warnings.append(f"Новый клиент «{o}» (выручка {rev_o:,.0f} ₽) — включён в расчёт, ИП по умолчанию "
-                            f"«{C.ip_of(o)}». Скажите Клоду, чтобы подтвердить ИП и настройки объекта.")
+            warnings.append(f"Новый клиент «{o}» (выручка {rev_o:,.0f} ₽) — включён в расчёт, ИП по файлу: "
+                            f"«{C.ip_of(o)}». Скажите Клоду, чтобы проверить настройки объекта (зарплата, транспорт).")
     if not active_clients:
         warnings.append("Не найдено ни одного листа-клиента в таблице — возможно, изменилась структура "
                         "или сменился год в названиях листов. Нужна проверка.")
+
+    # напоминание про новый файл на новый год: данные отстают от текущего года
+    data_years = {m[:4] for o in inc.rev_obj_month.values() for m, v in o.items() if v}
+    max_year = max(data_years) if data_years else str(now.year)
+    if int(max_year) < now.year:
+        warnings.append(f"Начался {now.year} год, а свежих данных за {now.year} в таблице нет "
+                        f"(последние — за {max_year}). Похоже, нужен новый файл-источник выручки на {now.year}. "
+                        f"Напишите Клоду — подключим и обновим правила.")
     if not reconciled:
         warnings.append(f"Контроль янв–июн не сошёлся: {janjun:,.0f} вместо {CONTROL_REVENUE_JANJUN:,.0f}. "
                         f"Похоже, поменялась структура таблицы — цифрам пока не доверять, нужна проверка.")

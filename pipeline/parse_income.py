@@ -28,6 +28,20 @@ def _is_zettek(obj):
     return "зеттек" in str(obj).lower()
 
 
+def _row_ip(row, iIP, iBank):
+    """ИП строки-счёта из файла: сперва столбец «ИП», затем банк с суффиксом Д/П
+    (Д = Миронов, П = Молчанов). Вернёт 'Миронов' | 'Молчанов' | None."""
+    if iIP is not None and iIP < len(row) and row[iIP]:
+        s = str(row[iIP]).lower()
+        if "мирон" in s: return "Миронов"
+        if "молчан" in s: return "Молчанов"
+    if iBank is not None and iBank < len(row) and row[iBank]:
+        b = str(row[iBank]).strip()
+        if b.endswith("Д"): return "Миронов"
+        if b.endswith("П"): return "Молчанов"
+    return None
+
+
 class IncomeData:
     def __init__(self):
         self.rev_obj_month = defaultdict(lambda: defaultdict(float))   # obj -> month -> выручка
@@ -100,12 +114,15 @@ def parse_income(path=None):
                     return j
             return None
 
-        # --- блок счетов: выручка (Сумма услуг) + дебиторка (Недоплата) ---
+        # --- блок счетов: выручка (Сумма услуг) + дебиторка (Недоплата) + ИП ---
         iL = col(lambda k: "дата услуг от" in k)
         iN = col(lambda k: k == "сумма услуг")
         iSch = col(lambda k: "счет" in k and "ндс" in k)
         iVat = col(lambda k: "из них ндс" in k)
         iX = col(lambda k: "недоплата" in k)
+        iIP = col(lambda k: k == "ип")                       # явный столбец «ИП»
+        iBank = col(lambda k: "банк" in k)                   # банк с суффиксом Д/П
+        ip_sum = defaultdict(float)                          # выручка объекта по ИП (для определения ИП объекта)
         okaz = sch = vat = debt = 0.0
         if iL is not None and iN is not None:
             for row in ws.iter_rows(min_row=2, values_only=True):
@@ -118,6 +135,12 @@ def parse_income(path=None):
                 if iSch is not None: sch += num(row[iSch])
                 if iVat is not None: vat += num(row[iVat])
                 if iX is not None:   debt += num(row[iX])
+                rip = _row_ip(row, iIP, iBank)        # ИП строки-счёта из файла
+                if rip and n:
+                    ip_sum[rip] += n
+            # ИП объекта = ИП, на который выставлено больше выручки (из файла, не по имени)
+            if ip_sum:
+                C.OBJ_IP[obj] = max(ip_sum, key=ip_sum.get)
             if okaz or debt:
                 d.receivables.append({"obj": obj, "оказано": okaz, "счет_ндс": sch,
                                       "ндс": vat, "долг": debt})
