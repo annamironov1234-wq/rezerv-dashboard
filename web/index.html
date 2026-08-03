@@ -19,7 +19,7 @@
   }
   /* дашборд всегда светлый (по просьбе Анны) */
   *{box-sizing:border-box}
-  html{font-size:calc(17px*var(--scale));color-scheme:light}
+  html{font-size:calc(17px*var(--scale));color-scheme:light;-webkit-text-size-adjust:100%}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:1rem;line-height:1.45;-webkit-font-smoothing:antialiased}
   .header{background:linear-gradient(100deg,var(--deep),var(--deep-2) 70%,#2b2088);color:#fff;padding:.7rem 1.2rem}
   .header .in{max-width:1240px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
@@ -157,17 +157,110 @@
   .alert b{color:#7a5b00}
   .alert ul{margin:.35rem 0 0;padding-left:1.1rem}
   .alert li{margin:.15rem 0}
-  @media(max-width:640px){
-    th,td{padding:.5rem .55rem;font-size:.82rem}
-    tr.sub td{font-size:.72rem}
-    .kpi .val{font-size:1.5rem}
-    .kpi{padding:.7rem .75rem}
-    td.lvl1:first-child{padding-left:1.3rem}
-    td.lvl2:first-child{padding-left:2.1rem}
-    tr.sub td:first-child{padding-left:1.2rem}
-    .filters{gap:.4rem}
-    .filters .sel{flex:1 1 45%;min-width:0}
-    .wrap,main{padding-left:.7rem;padding-right:.7rem}
+  /* ================= ТЕЛЕФОН =================
+     Принцип: подписи ужимаем и переносим по словам, цифры не трогаем и не режем.
+     Число всегда крупнее своей подписи, первый столбец не растягивает строку. */
+  @media(max-width:760px){
+    .wrap{padding:.6rem .5rem 2.5rem}
+
+    /* шапка: убираем всё, что съедает высоту и ширину */
+    .header{padding:.5rem .6rem}
+    .header .in{gap:.5rem}
+    .ttl .k{display:none}
+    .ttl h1{font-size:.92rem}
+    .lg{gap:.5rem}
+    .plaque{padding:.28rem .45rem;border-radius:6px}
+    .plaque img{height:1.45rem}
+    .coin{width:1.65rem;height:1.65rem;font-size:.95rem}
+    .hactions{gap:.35rem}
+    .badge{font-size:.58rem;padding:.18rem .45rem}
+    .btn{font-size:.64rem;padding:.28rem .5rem}
+
+    /* вкладки: четыре штуки должны влезать без прокрутки */
+    .tabs{margin-bottom:.6rem}
+    .tab{padding:.5rem .5rem;font-size:.72rem}
+
+    .meta{font-size:.62rem;margin-bottom:.6rem;gap:.4rem}
+    .filters{gap:.35rem;margin-bottom:.5rem}
+    .filters .sel{flex:1 1 45%;min-width:0;font-size:.78rem;padding:.42rem 1.7rem .42rem .6rem}
+    .exp-bar{gap:.35rem}
+    .exp-bar .exp-lbl{font-size:.68rem}
+    .exp-bar .sel{font-size:.76rem;padding:.4rem 1.6rem .4rem .6rem}
+    .block-lbl{font-size:.72rem;margin:.3rem 0 .4rem}
+    .note-box{font-size:.74rem;padding:.55rem .7rem}
+    .alert{font-size:.78rem;padding:.55rem .7rem}
+
+    /* KPI: подпись мелкая и в две строки, цифра во всю карточку и без обрезки */
+    .kpis{grid-template-columns:repeat(2,1fr);gap:.45rem;margin-bottom:.7rem}
+    .kpi{padding:.5rem .55rem;min-width:0}
+    .kpi.accent::before{width:2px}
+    .kpi .lab{font-size:.55rem;letter-spacing:.01em;line-height:1.2}
+    .kpi .val{font-size:clamp(.95rem,5.4vw,1.7rem);letter-spacing:-.4px;margin-top:.1rem;white-space:nowrap}
+    .kpi .val small{font-size:.52rem}
+    .kpi .sub{font-size:.55rem;line-height:1.2;margin-top:.1rem}
+
+    /* карточка */
+    .card{margin-bottom:.6rem}
+    .card .hd{padding:.5rem .6rem;flex-wrap:wrap;gap:.2rem}
+    .card .hd h2{font-size:.7rem}
+    .card .hd .note{font-size:.56rem;flex:1 0 100%;order:3}
+    .card .hd .arrow{width:1.5rem;height:1.5rem;font-size:.7rem}
+    .btn-charts,.btn-unit,.btn-back{font-size:.76rem;padding:.42rem .7rem}
+
+    /* ТАБЛИЦЫ — главное.
+       Первый столбец: переносится, ограничен по ширине, мелким шрифтом.
+       Цифры: крупнее подписи, в одну строку, узкие отступы. */
+    table{min-width:0}
+    th,td{padding:.4rem .38rem;font-size:.92rem}
+    /* подпись строки: фиксированная узкая колонка с переносом по словам.
+       width обязателен — иначе автоширина таблицы сжимает её до одной буквы в строке */
+    th:first-child,td:first-child{
+      white-space:normal;overflow-wrap:break-word;word-break:normal;
+      width:8.4rem;min-width:8.4rem;max-width:8.4rem;
+      font-size:.72rem;line-height:1.2;padding-right:.45rem}
+    thead th{font-size:.58rem;letter-spacing:.01em;padding:.32rem .38rem}
+    /* одномесячный вид: таблица влезает целиком, подписи можно дать больше */
+    table.narrow td,table.narrow th{padding-right:.5rem}
+    table.narrow td:first-child,table.narrow th:first-child{
+      width:auto;min-width:0;max-width:52vw;padding-right:.6rem}
+    tr.sub td{font-size:.82rem}
+    tr.sub td:first-child{font-size:.66rem;padding-left:.7rem}
+    tr.vat td{font-size:.68rem}
+    td.lvl1:first-child{padding-left:.65rem}
+    td.lvl2:first-child{padding-left:1.2rem}
+    td.ex1:first-child{padding-left:.75rem}
+    td.ex2:first-child{padding-left:1.4rem}
+    tr.subgroup .tw,tr.grp .tw,.tw3,.artrow .tw2{width:.85rem}
+    .trend{font-size:.58rem;margin-left:.2rem}
+    .objtbl table{min-width:0;table-layout:auto}
+    .objtbl th:first-child,.objtbl td:first-child{width:8.4rem;min-width:8.4rem;max-width:8.4rem}
+
+    /* расшифровка выплат */
+    .txn-box{max-height:220px}
+    .txn-head,.txn-line{grid-template-columns:62px 1fr 54px 72px;gap:.28rem;padding:.28rem .4rem;font-size:.7rem}
+    .txn-head{font-size:.55rem}
+    .txn-head>:first-child,.txn-line>:first-child{font-size:.58rem;letter-spacing:-.03em}
+    .txn-det .txn-head,.txn-det .txn-line{grid-template-columns:62px 1fr 54px 72px 40px}
+    .txn-det .txn-line{padding:.3rem .4rem}
+
+    .chartwrap{padding:.6rem .5rem}
+    .legend{gap:.6rem;font-size:.62rem;flex-wrap:wrap}
+    .reopen{right:.7rem;top:4.6rem;font-size:.72rem}
+  }
+  /* узкий телефон (iPhone SE / mini, ~360px и меньше) */
+  @media(max-width:400px){
+    .kpis{grid-template-columns:1fr}
+    .kpi .val{font-size:clamp(1.25rem,8vw,1.9rem)}
+    .kpi .lab,.kpi .sub{font-size:.6rem}
+    th,td{padding:.38rem .3rem;font-size:.88rem}
+    th:first-child,td:first-child{width:7.4rem;min-width:7.4rem;max-width:7.4rem;font-size:.7rem}
+    .objtbl th:first-child,.objtbl td:first-child{width:7.4rem;min-width:7.4rem;max-width:7.4rem}
+    table.narrow td:first-child,table.narrow th:first-child{width:auto;min-width:0;max-width:56vw}
+    .tab{padding:.45rem .4rem;font-size:.68rem}
+    /* «Объект» в расшифровке уступает место сумме */
+    .txn-head>:nth-child(3),.txn-line>:nth-child(3){display:none}
+    .txn-head,.txn-line{grid-template-columns:62px 1fr 76px}
+    .txn-det .txn-head,.txn-det .txn-line{grid-template-columns:62px 1fr 72px 40px}
   }
 </style>
 </head>
