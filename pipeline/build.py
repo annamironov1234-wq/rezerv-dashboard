@@ -17,14 +17,7 @@ def main():
     now = datetime.datetime.now()
     cur_month = f"{now.year:04d}-{now.month:02d}"      # текущий (идущий) месяц
     per = ("2026-01", cur_month)                        # период до текущего месяца включительно
-
-    # Текущий незакрытый месяц: счёта ещё нет -> выручка = начисленная (работа × ставка)
-    from .parse_income import accrued_rev
-    for obj in list(inc.rates.keys()):
-        if not inc.rev_obj_month[obj].get(cur_month):
-            acc = accrued_rev(inc, obj, cur_month)
-            if acc:
-                inc.rev_obj_month[obj][cur_month] = acc
+    # Выручка везде одинаково — «Сумма услуг» по счетам (без спец-логики для текущего месяца).
     pnl = {ip: build_pnl(period=per, ip=ip, inc=inc, exp=exp, sal=sal)
            for ip in ("Все", "Миронов", "Молчанов")}
     p = pnl["Все"]
