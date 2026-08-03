@@ -156,3 +156,8 @@ def parse_income(path=None):
                     cell[2] += hrs
 
     return d
+
+
+def accrued_rev(inc, obj, month):
+    """Начисленная выручка объекта за месяц = Σ(ставка клиента × часы) из дневного блока."""
+    return sum(c[month][0] for c in inc.rates.get(obj, {}).values() if month in c)
