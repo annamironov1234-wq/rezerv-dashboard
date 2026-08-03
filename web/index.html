@@ -156,8 +156,8 @@
   <div class="tabs">
     <div class="tab active" data-page="pnl">P&amp;L</div>
     <div class="tab" data-page="debt">Дебиторка</div>
-    <div class="tab" data-page="expenses">Расходы</div><div class="tab" data-page="income">Доходы</div>
-    <div class="tab soon">По объектам</div>
+    <div class="tab" data-page="expenses">Расходы</div><div class="tab" data-page="income">По объектам</div>
+    <div class="tab soon">Доходы</div>
     <div class="tab soon">Динамика</div><div class="tab soon">Бюджет</div>
   </div>
   <div id="filters" class="filters"></div>
@@ -244,7 +244,7 @@ function initFilters(d){
 
 const MONN={'01':'Янв','02':'Фев','03':'Мар','04':'Апр','05':'Май','06':'Июн','07':'Июл','08':'Авг','09':'Сен','10':'Окт','11':'Ноя','12':'Дек'};
 let INCOMPLETE='';
-const mlab=m=>(mlab(m))+(m===INCOMPLETE?' •':'');
+const mlab=m=>(MONN[m.slice(5)]||m)+(m===INCOMPLETE?' •':'');
 function periodLabel(months){ if(!months||!months.length)return ''; const a=months[0],b=months[months.length-1];
   return MONN[a.slice(5)]+' – '+MONN[b.slice(5)]+' '+b.slice(0,4); }
 
@@ -509,30 +509,45 @@ function rateChart(title, note, months, mL, series, labelStride){
   cw.innerHTML=`<div class="chart-scroll">${svg}</div><div class="legend">`+series.map(s=>`<span><span class="dot" style="background:${s.color}"></span>${s.name}</span>`).join('')+`</div>`;
   card.append(cw); return card;
 }
+let INC_MONTH='all';
 function drawIncome(d){
   const app=document.getElementById('app'); app.innerHTML='';
   const months=d.pnl['Все'].months;
   const objs=incomeObjs(d);
-  const totRev=objs.reduce((s,x)=>s+x.rev,0), totHrs=objs.reduce((s,x)=>s+x.hrs,0);
-  const wsum=k=>{let n=0,dn=0;objs.forEach(x=>{if(x[k]){n+=x[k]*x.hrs;dn+=x.hrs;}});return dn?n/dn:0;};
+  const one = INC_MONTH!=='all';
+  // значения объекта за выбранный период/месяц
+  const oRev=x=> one ? (x.R[INC_MONTH]||0) : x.rev;
+  const oHrs=x=> one ? (x.H[INC_MONTH]||0) : x.hrs;
+  const oCr =x=> one ? x.crAvg(INC_MONTH) : x.cr;
+  const oWr =x=> one ? x.wrAvg(INC_MONTH) : x.wr;
+  const oMh =x=> oCr(x)-oWr(x);
+  // панель месяца
+  const bar=el('div','exp-bar');
+  const sel=el('select','sel'); sel.append(new Option('Весь период','all'));
+  months.forEach(m=>sel.append(new Option(mlab(m)+' 2026', m)));
+  sel.value=INC_MONTH; sel.onchange=()=>{INC_MONTH=sel.value;drawIncome(d);};
+  bar.append(el('span','exp-lbl','Смотреть:'),sel); app.append(bar);
+  const perLbl = one ? (MONN[INC_MONTH.slice(5)]+' 2026'+(INC_MONTH===INCOMPLETE?' • неполный':'')) : periodLabel(months);
+  const totRev=objs.reduce((s,x)=>s+oRev(x),0), totHrs=objs.reduce((s,x)=>s+oHrs(x),0);
+  const wsum=fn=>{let n=0,dn=0;objs.forEach(x=>{const v=fn(x),h=oHrs(x);if(v&&h){n+=v*h;dn+=h;}});return dn?n/dn:0;};
   const kp=el('div','kpis');
-  kp.innerHTML=`<div class="kpi accent"><div class="lab">Выручка</div><div class="val">${fmt(totRev)} <small>тыс ₽</small></div><div class="sub">${periodLabel(months)}</div></div>`+
-    `<div class="kpi"><div class="lab">Часов отработано</div><div class="val">${fmtRate(totHrs)}</div><div class="sub">всего по объектам</div></div>`+
-    `<div class="kpi"><div class="lab">Ставка заказчика</div><div class="val">${fmtR(wsum('cr'))} <small>₽/ч</small></div><div class="sub">средневзвеш.</div></div>`+
-    `<div class="kpi"><div class="lab">Маржа с часа</div><div class="val">${fmtR(wsum('mh'))} <small>₽/ч</small></div><div class="sub">заказчик − исполнитель</div></div>`;
+  kp.innerHTML=`<div class="kpi accent"><div class="lab">Выручка</div><div class="val">${fmt(totRev)} <small>тыс ₽</small></div><div class="sub">${perLbl}</div></div>`+
+    `<div class="kpi"><div class="lab">Часов отработано</div><div class="val">${fmtRate(totHrs)}</div><div class="sub">${perLbl}</div></div>`+
+    `<div class="kpi"><div class="lab">Ставка заказчика</div><div class="val">${fmtR(wsum(oCr))} <small>₽/ч</small></div><div class="sub">средневзвеш.</div></div>`+
+    `<div class="kpi"><div class="lab">Маржа с часа</div><div class="val">${fmtR(wsum(oMh))} <small>₽/ч</small></div><div class="sub">заказчик − исполнитель</div></div>`;
   app.append(kp);
-  const card=el('div','card'); card.append(el('div','hd','<h2>Доходы по клиентам · ставки</h2><span class="note">клик по клиенту → детали по месяцам</span>'));
+  const card=el('div','card'); card.append(el('div','hd',`<h2>По объектам · ставки</h2><span class="note">${perLbl} · клик по объекту → детали по месяцам</span>`));
   const sc=el('div','scroll'),tb=el('table'),thead=el('thead'),hr=el('tr');
-  ['Клиент','Выручка, тыс','Часы','Ставка заказчика ₽/ч','Ставка исполнителя ₽/ч','Маржа ₽/ч','Маржин. %'].forEach(h=>hr.append(el('th',null,h)));
+  ['Объект','Выручка, тыс','Часы','Ставка заказчика ₽/ч','Ставка исполнителя ₽/ч','Маржа ₽/ч','Маржин. %'].forEach(h=>hr.append(el('th',null,h)));
   thead.append(hr);tb.append(thead);const body=el('tbody');tb.append(body);
-  objs.forEach(x=>{const tr=el('tr','sub');
+  objs.forEach(x=>{const cr=oCr(x),wr=oWr(x),mh=cr-wr;const tr=el('tr','sub');
     const nc=el('td','drillable',x.o.replace(/\s*\(\d+\).*/,'')); nc.style.cursor='pointer'; nc.onclick=()=>drawIncomeObj(d,x.o); tr.append(nc);
-    tr.append(el('td',null,fmt(x.rev)));
-    tr.append(el('td',null,fmtRate(x.hrs)));
-    tr.append(el('td',null,x.cr?fmtR(x.cr):'—'));
-    tr.append(el('td',null,x.wr?fmtR(x.wr):'—'));
-    tr.append(el('td', (x.cr&&x.wr)?(x.mh>=0?'pos':'neg'):null, (x.cr&&x.wr)?fmtR(x.mh):'—'));
-    tr.append(el('td','pct', (x.cr&&x.wr)?Math.round(x.mh/x.cr*100)+'%':'—'));
+    tr.append(el('td',null,fmt(oRev(x))));
+    tr.append(el('td',null,fmtRate(oHrs(x))));
+    tr.append(el('td',null,cr?fmtR(cr):'—'));
+    tr.append(el('td',null,wr?fmtR(wr):'—'));
+    tr.append(el('td', (cr&&wr)?(mh>=0?'pos':'neg'):null, (cr&&wr)?fmtR(mh):'—'));
+    tr.append(el('td','pct', (cr&&wr)?Math.round(mh/cr*100)+'%':'—'));
     body.append(tr);});
   sc.append(tb);card.append(sc);app.append(card);
 }
