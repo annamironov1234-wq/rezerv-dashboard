@@ -1,6 +1,6 @@
 """Собирает самодостаточный dist/rezerv-dashboard.html (данные + логотип + иконка внутри).
 Запуск: python -m dashboard.pipeline.publish"""
-import base64, re
+import base64, re, shutil
 from . import config as C
 
 WEB = C.DASH / "web"
@@ -21,6 +21,7 @@ def build_html():
     html = html.replace("<body>", "<body>\n<script>window.__DATA__=" + data + ";</script>", 1)
     DIST.parent.mkdir(parents=True, exist_ok=True)
     DIST.write_text(html, encoding="utf-8")
+    shutil.copy(WEB / "apple-touch-icon.png", DIST.parent / "apple-touch-icon.png")  # иконка для экрана «Домой»
     return len(html)
 
 
