@@ -7,9 +7,25 @@ from .parse_income import parse_income
 from .parse_expenses import parse_expenses
 from .parse_salary import parse_salary
 from . import config as C
+from . import checks
 
 CONTROL_REVENUE_JANJUN = 130312854   # контроль сверки (метод согласован)
 OUT = C.DASH / "build" / "data.json"
+
+
+def _prev_metrics():
+    """Слепок цифр прошлой ОПУБЛИКОВАННОЙ сборки. Недоступен (первый прогон,
+    нет сети) — сравнение просто не делаем, остальные проверки работают."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(C.PUBLIC_URL + "/metrics.json",
+                                     headers={"Cache-Control": "no-cache"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except Exception as e:
+        print(f"[ПРОВЕРКА] слепок прошлой сборки недоступен ({e}) — сравнение пропущено",
+              file=sys.stderr)
+        return None
 
 
 def main():
@@ -72,6 +88,10 @@ def main():
         warnings.append(f"Начался {now.year} год, а свежих данных за {now.year} в таблице нет "
                         f"(последние — за {max_year}). Похоже, нужен новый файл-источник выручки на {now.year}. "
                         f"Напишите Клоду — подключим и обновим правила.")
+    if C.NEW_ARTICLES:                          # новая статья расходов: добавляем сама, просто сообщаем
+        warnings.append("Появились новые статьи расходов, добавлены в постоянные: "
+                        + ", ".join(f"«{a}»" for a in sorted(C.NEW_ARTICLES))
+                        + ". Если место в P&L другое — скажите Клоду.")
     if not reconciled:
         warnings.append(f"Контроль янв–июн не сошёлся: {janjun:,.0f} вместо {CONTROL_REVENUE_JANJUN:,.0f}. "
                         f"Похоже, поменялась структура таблицы — цифрам пока не доверять, нужна проверка.")
@@ -140,9 +160,28 @@ def main():
                       for o, sms in inc.rates.items()},
         "receivables": [{**r, "ip": C.ip_of(r["obj"])} for r in inc.receivables],
     }
+    # --- САМО-ПРОВЕРКА ПЕРЕД ПУБЛИКАЦИЕЙ ---------------------------------
+    # STOP-проверка не прошла -> роняем сборку. Публикации не будет, на сайте
+    # останутся вчерашние верные цифры, и через 20 часов дашборд сам вывесит
+    # жёлтый баннер «данные не обновлялись» — это и есть сигнал Анне.
+    md = getattr(inc, "max_date", None)          # свежесть исходника: сколько дней без новых строк
+    data["source_stale_days"] = (now.date() - md).days if md else None
+    prev = _prev_metrics()
+    stops, notes = checks.run(data, prev)
+    data["warnings"] = notes
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    (OUT.parent / "metrics.json").write_text(
+        json.dumps(checks.metrics(data), ensure_ascii=False, indent=1), encoding="utf-8")
+    if stops:
+        print("\n[ПРОВЕРКА НЕ ПРОШЛА] публикация отменена, на сайте останутся прошлые данные:",
+              file=sys.stderr)
+        for x in stops:
+            print("  • " + x, file=sys.stderr)
+        sys.exit(1)
     print(f"OK -> {OUT}")
+    print(f"   проверок пройдено: все | сравнение с прошлой сборкой: "
+          f"{'есть' if prev else 'нет (первый прогон)'}")
     print(f"   Выручка {p.revenue:,.0f} | Маржа {p.margin:,.0f} ({p.margin_pct:.1%}) | "
           f"EBITDA {p.ebitda:,.0f} | Чистая {p.net:,.0f} | сверка: {'OK' if reconciled else 'РАСХОЖДЕНИЕ'}")
 

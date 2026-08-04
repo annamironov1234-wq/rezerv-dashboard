@@ -52,6 +52,7 @@ class IncomeData:
         # история ставок: obj -> смена -> month -> [Σ(ставка клиента×часы), Σ(ставка рабоч×часы), Σчасы]
         self.rates = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [0.0, 0.0, 0.0])))
         self.receivables = []   # [{obj, оплачено, оказано, дебиторка, ндс}]
+        self.max_date = None      # самая свежая дата в исходнике (свежесть данных)
         self.years_seen = set()   # какие годы вообще есть в листах (сторож смены года)
         self.client_objects = []  # имена всех распознанных листов-клиентов (для авто-детекта новых)
 
@@ -132,6 +133,9 @@ def parse_income(path=None):
                 # пустых заготовок с датами вперёд (04.01.2027) и мусорных 01.01.1900
                 if num(row[iN]) or (iX is not None and num(row[iX])):
                     d.years_seen.add(row[iL].year)
+                    dt = row[iL].date() if hasattr(row[iL], "date") else row[iL]
+                    if d.max_date is None or dt > d.max_date:
+                        d.max_date = dt
                 if row[iL].year != C.YEAR:
                     continue   # ЛИСТЫ ПРОШЛЫХ ЛЕТ. Архив «… (25) стар» имеет ту же сигнатуру
                                # столбцов, и без этой строки его старый долг (87 млн) втекал

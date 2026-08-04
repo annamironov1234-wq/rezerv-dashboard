@@ -375,9 +375,16 @@ function periodLabel(months){ if(!months||!months.length)return ''; const a=mont
 function renderAlerts(d){
   const box=document.getElementById('alerts'); if(!box) return;
   const w=[...(d.warnings||[])];
-  const m=(d.updated_at||'').match(/(\d{2})\.(\d{2})\.(\d{4})/);   // протухание — по дате устройства
-  if(m){ const upd=new Date(+m[3],+m[2]-1,+m[1]); const days=Math.floor((Date.now()-upd)/86400000);
-    if(days>=2) w.push('Данные не обновлялись '+days+' дн. — возможно, робот потерял доступ к таблицам. Напишите Клоду.'); }
+  // ПРОТУХАНИЕ ДАННЫХ — главный сигнал Анне (решение 04.08).
+  // Обновление приходит в 07:40 и 19:40, то есть раз в 12 часов. Если прошло больше 20,
+  // значит либо будильник не сработал, либо сборка не прошла само-проверку и публикация
+  // была отменена. В обоих случаях цифры на экране устарели, и это надо видеть.
+  const m=(d.updated_at||'').match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/);
+  if(m){ const upd=Date.UTC(+m[3],+m[2]-1,+m[1],+m[4]-3,+m[5]);   // метка в МСК = UTC+3
+    const hrs=Math.floor((Date.now()-upd)/3600000);
+    if(hrs>=20){ const txt = hrs<48 ? hrs+' ч' : Math.floor(hrs/24)+' дн';
+      w.push('Данные не обновлялись '+txt+'. Обновление не прошло — цифры на экране устарели. '
+             +'Если это не разовый сбой, напишите Клоду.'); } }
   box.innerHTML = w.length
     ? '<div class="alert"><b>⚠️ Требует внимания:</b><ul>'+w.map(x=>'<li>'+x+'</li>').join('')+'</ul></div>' : '';
 }
