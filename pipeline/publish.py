@@ -26,6 +26,7 @@ def build_html():
     # перезагружается, если сервер отдал более свежую дату (см. checkFresh в index.html)
     stamp = json.loads(data).get("updated_at", "")
     (DIST.parent / "stamp.txt").write_text(stamp, encoding="utf-8")
+    shutil.copy(WEB / "sw.js", DIST.parent / "sw.js")  # «сначала сеть» для иконки на экране «Домой»
     return len(html)
 
 

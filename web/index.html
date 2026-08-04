@@ -1061,6 +1061,11 @@ function checkFresh(){
     })
     .catch(()=>{});   // локальный просмотр или нет сети — молчим, ничего не ломаем
 }
+/* Иконка на экране «Домой» держит свою копию страницы и не умеет обновляться
+   потягиванием — этого жеста там просто нет. Service worker заставляет её при
+   каждом открытии идти в сеть, а кэш оставляет только на случай «нет связи». */
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkFresh(); });
 window.addEventListener('pageshow',e=>{ if(e.persisted) checkFresh(); });   // возврат «назад» из истории
 setTimeout(checkFresh,1200);
