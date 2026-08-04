@@ -377,7 +377,7 @@ function renderAlerts(d){
   const w=[...(d.warnings||[])];
   const m=(d.updated_at||'').match(/(\d{2})\.(\d{2})\.(\d{4})/);   // протухание — по дате устройства
   if(m){ const upd=new Date(+m[3],+m[2]-1,+m[1]); const days=Math.floor((Date.now()-upd)/86400000);
-    if(days>=4) w.push('Данные не обновлялись '+days+' дн. — возможно, робот потерял доступ к таблицам. Напишите Клоду.'); }
+    if(days>=2) w.push('Данные не обновлялись '+days+' дн. — возможно, робот потерял доступ к таблицам. Напишите Клоду.'); }
   box.innerHTML = w.length
     ? '<div class="alert"><b>⚠️ Требует внимания:</b><ul>'+w.map(x=>'<li>'+x+'</li>').join('')+'</ul></div>' : '';
 }
