@@ -1,6 +1,6 @@
 """Собирает самодостаточный dist/rezerv-dashboard.html (данные + логотип + иконка внутри).
 Запуск: python -m dashboard.pipeline.publish"""
-import base64, re, shutil
+import base64, json, re, shutil
 from . import config as C
 
 WEB = C.DASH / "web"
@@ -22,6 +22,10 @@ def build_html():
     DIST.parent.mkdir(parents=True, exist_ok=True)
     DIST.write_text(html, encoding="utf-8")
     shutil.copy(WEB / "apple-touch-icon.png", DIST.parent / "apple-touch-icon.png")  # иконка для экрана «Домой»
+    # метка свежести: страница на телефоне спрашивает этот файл мимо кэша и
+    # перезагружается, если сервер отдал более свежую дату (см. checkFresh в index.html)
+    stamp = json.loads(data).get("updated_at", "")
+    (DIST.parent / "stamp.txt").write_text(stamp, encoding="utf-8")
     return len(html)
 
 

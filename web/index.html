@@ -1043,6 +1043,28 @@ function buildChart(p, months, mLabels){
   return card;
 }
 
+/* ================= ПРОВЕРКА СВЕЖЕСТИ =================
+   Страница, сохранённая на экран «Домой», живёт в кэше телефона: iOS может
+   показать вчерашнюю копию, не спросив сервер. Поэтому при открытии и при
+   каждом возврате в приложение спрашиваем маленький файл stamp.txt (десятки
+   байт, мимо кэша). Если там метка свежее нашей — молча перезагружаемся.
+   Перезагрузка идёт с новым ?v=, иначе телефон опять достанет старое из кэша. */
+function checkFresh(){
+  if(!DATA) return;
+  fetch('stamp.txt?_='+Date.now(),{cache:'no-store'})
+    .then(r=>r.ok?r.text():Promise.reject())
+    .then(t=>{
+      const server=(t||'').trim();
+      if(!server || server===(DATA.updated_at||'').trim()) return;         // всё свежее некуда
+      if(new URLSearchParams(location.search).get('v')===server) return;   // уже пробовали, не зациклимся
+      location.replace(location.pathname+'?v='+encodeURIComponent(server));
+    })
+    .catch(()=>{});   // локальный просмотр или нет сети — молчим, ничего не ломаем
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkFresh(); });
+window.addEventListener('pageshow',e=>{ if(e.persisted) checkFresh(); });   // возврат «назад» из истории
+setTimeout(checkFresh,1200);
+
 // ×2 zoom
 let big=false;
 document.getElementById('zoom').addEventListener('click',function(){

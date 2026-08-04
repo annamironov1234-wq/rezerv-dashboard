@@ -45,6 +45,7 @@ jobs:
           mkdir -p _site
           cp dist/rezerv-dashboard.html _site/index.html
           cp dist/apple-touch-icon.png _site/apple-touch-icon.png
+          cp dist/stamp.txt _site/stamp.txt
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
