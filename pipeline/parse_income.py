@@ -52,6 +52,7 @@ class IncomeData:
         # история ставок: obj -> смена -> month -> [Σ(ставка клиента×часы), Σ(ставка рабоч×часы), Σчасы]
         self.rates = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [0.0, 0.0, 0.0])))
         self.receivables = []   # [{obj, оплачено, оказано, дебиторка, ндс}]
+        self.years_seen = set()   # какие годы вообще есть в листах (сторож смены года)
         self.client_objects = []  # имена всех распознанных листов-клиентов (для авто-детекта новых)
 
     def revenue(self, frm, to, obj=None, ip=None):
@@ -107,7 +108,6 @@ def parse_income(path=None):
         if not is_client:
             continue
         obj = nm.strip()
-        d.client_objects.append(obj)
         def col(pred):
             for k, j in H.items():
                 if pred(k):
@@ -128,6 +128,14 @@ def parse_income(path=None):
             for row in ws.iter_rows(min_row=2, values_only=True):
                 if not isinstance(row[iL], (datetime.datetime, datetime.date)):
                     continue   # строка «итого» = текст -> отсекаем
+                # сторож смены года считает только строки С ДЕНЬГАМИ: в шаблонах полно
+                # пустых заготовок с датами вперёд (04.01.2027) и мусорных 01.01.1900
+                if num(row[iN]) or (iX is not None and num(row[iX])):
+                    d.years_seen.add(row[iL].year)
+                if row[iL].year != C.YEAR:
+                    continue   # ЛИСТЫ ПРОШЛЫХ ЛЕТ. Архив «… (25) стар» имеет ту же сигнатуру
+                               # столбцов, и без этой строки его старый долг (87 млн) втекал
+                               # в дебиторку 2026-го. Выручку спасал фильтр по месяцам, её нет.
                 m = f"{row[iL].year:04d}-{row[iL].month:02d}"
                 n = num(row[iN])
                 d.rev_obj_month[obj][m] += n          # ВЫРУЧКА = «Сумма услуг» по месяцу оказания
@@ -142,6 +150,7 @@ def parse_income(path=None):
             if ip_sum:
                 C.OBJ_IP[obj] = max(ip_sum, key=ip_sum.get)
             if okaz or debt:
+                d.client_objects.append(obj)   # клиент отчётного года (архивные листы сюда не попадают)
                 d.receivables.append({"obj": obj, "оказано": okaz, "счет_ндс": sch,
                                       "ндс": vat, "долг": debt})
 

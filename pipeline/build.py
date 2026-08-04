@@ -47,6 +47,11 @@ def main():
     # --- авто-заглушки: система сама себя охраняет (чтобы Анне не держать это в голове) ---
     warnings = []
     clients = getattr(inc, "client_objects", [])
+    newer = [y for y in getattr(inc, "years_seen", set()) if y > C.YEAR]
+    if newer:                                   # сторож: начался новый год, а конфиг остался на старом
+        warnings.append(f"В таблице появились данные за {max(newer)} год, а дашборд считает "
+                        f"{C.YEAR}-й. Данные нового года НЕ учитываются. Напишите Клоду — "
+                        f"нужно перевести дашборд на новый год.")
     active_clients = []
     for o in clients:
         rev_o = inc.revenue(per[0], per[1], obj=o)   # выручка объекта за период
