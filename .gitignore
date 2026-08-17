@@ -2,13 +2,6 @@
 data/
 build/
 dist/
-
-# Собирается при каждом прогоне, в репозитории не нужно.
-# private/ тем более: там цифры и зарплаты.
-_site/
-private/
-.netlify/
-node_modules/
 docs/
 sessions/
 knowledge-base/

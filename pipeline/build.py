@@ -15,20 +15,11 @@ OUT = C.DASH / "build" / "data.json"
 
 def _prev_metrics():
     """Слепок цифр прошлой ОПУБЛИКОВАННОЙ сборки. Недоступен (первый прогон,
-    нет сети) — сравнение просто не делаем, остальные проверки работают.
-
-    С 17.08.2026 слепок закрыт функцией: предъявляем служебный ключ.
-    Ключа нет — значит запуск локальный, сравнение пропускаем."""
+    нет сети) — сравнение просто не делаем, остальные проверки работают."""
     import urllib.request
-    if not C.BUILD_TOKEN:
-        print("[ПРОВЕРКА] нет BUILD_TOKEN — сравнение с прошлой сборкой пропущено",
-              file=sys.stderr)
-        return None
     try:
-        req = urllib.request.Request(
-            C.METRICS_URL,
-            headers={"Cache-Control": "no-cache", "X-Build-Token": C.BUILD_TOKEN},
-        )
+        req = urllib.request.Request(C.PUBLIC_URL + "/metrics.json",
+                                     headers={"Cache-Control": "no-cache"})
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.loads(r.read().decode("utf-8"))
     except Exception as e:

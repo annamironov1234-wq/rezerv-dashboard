@@ -1,0 +1,106 @@
+functionsDirectory = "/Users/annamironova/Desktop/Курсор РАБОЧАЯ папка/clients/rezerv-sil/dashboard/netlify/functions"
+functionsDirectoryOrigin = "config"
+headersOrigin = "config"
+redirectsOrigin = "config"
+plugins = []
+
+[build]
+publish = "/Users/annamironova/Desktop/Курсор РАБОЧАЯ папка/clients/rezerv-sil/dashboard/_site"
+publishOrigin = "config"
+commandOrigin = "config"
+command = "echo 'сборку делает GitHub Actions, тут собирать нечего'"
+functions = "/Users/annamironova/Desktop/Курсор РАБОЧАЯ папка/clients/rezerv-sil/dashboard/netlify/functions"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[functions]
+
+[functions."*"]
+included_files = ["private/**"]
+node_bundler = "esbuild"
+
+[[headers]]
+for = "/*"
+
+[headers.values]
+X-Robots-Tag = "noindex, nofollow"
+Referrer-Policy = "no-referrer"
+X-Content-Type-Options = "nosniff"
+
+[[headers]]
+for = "/index.html"
+
+[headers.values]
+Cache-Control = "no-store"
+
+[[redirects]]
+from = "/app"
+to = "/.netlify/functions/app"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/api/login"
+to = "/.netlify/functions/login"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/api/data"
+to = "/.netlify/functions/data"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/api/metrics"
+to = "/.netlify/functions/metrics"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/api/stamp"
+to = "/.netlify/functions/stamp"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]

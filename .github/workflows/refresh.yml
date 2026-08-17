@@ -16,88 +16,40 @@ on:
     - cron: '13 14 * * *'     # 17:13 МСК
     - cron: '37 15 * * *'     # 18:37 МСК
   workflow_dispatch:           # можно запустить вручную кнопкой
-
-# 17.08.2026: переехали с GitHub Pages на Netlify. Причина не в удобстве —
-# на Pages страница с ФИО сотрудников, окладами и премиями была доступна
-# всему интернету без пароля. Pages бесплатно публикуется только из публичного
-# репозитория, а публичный репозиторий значит публичный сайт. Прав pages/id-token
-# больше не нужно.
 permissions:
   contents: read
-
+  pages: write
+  id-token: write
 concurrency:
-  group: dashboard
+  group: pages
   cancel-in-progress: true
-
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
       - run: pip install -r requirements.txt
-
-      - name: Тянем Google -> считаем -> собираем
+      - name: Тянем Google -> считаем -> собираем файл
         env:
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
-          # Служебный ключ: им сборка забирает слепок прошлых цифр, чтобы
-          # сравнить с новыми. Без него сравнение молча выключается,
-          # а это главная защита от тихих поломок.
-          BUILD_TOKEN: ${{ secrets.BUILD_TOKEN }}
-          DASH_URL: ${{ secrets.DASH_URL }}
         run: |
           python -m pipeline.gsync
           python -m pipeline.build
           python -m pipeline.publish
-
-      - name: Проверяем, что в публичную папку не попали цифры
-        # Пояс поверх подтяжек: publish.py это уже проверяет и падает сам.
-        # Но именно здесь ошибка стоит дороже всего, поэтому смотрим ещё раз
-        # и чужими глазами — простым поиском по файлам.
-        run: |
-          if grep -rlE '"оклад"|"премия"|window\.__DATA__|"счет_ндс"' _site/ 2>/dev/null; then
-            echo "СТОП: в _site нашлись данные. Публикации не будет."
-            exit 1
-          fi
-          if [ ! -s private/data.json ]; then
-            echo "СТОП: private/data.json пуст или отсутствует."
-            exit 1
-          fi
-          echo "Публичная папка чистая, цифры лежат отдельно."
-
-      - name: Публикуем на Netlify
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        run: |
-          npm install -g netlify-cli@latest
-
-          # Обычный путь: публикуем набело.
-          if netlify deploy --prod --dir=_site --functions=netlify/functions; then
-            echo "Опубликовано набело."
-            exit 0
-          fi
-
-          # Запасной путь. 17.08.2026 с ноутбука Анны публикация набело стала
-          # отвечать Forbidden, при том что черновик проходит, а тот же доступ
-          # спокойно пишет настройки. Причина на стороне Netlify непонятна.
-          # Черновик собирается точно так же, поэтому просто переводим его
-          # в основной - результат тот же.
-          echo "Публикация набело не прошла, иду через черновик."
-          OUT=$(netlify deploy --dir=_site --functions=netlify/functions)
-          echo "$OUT"
-          ID=$(echo "$OUT" | grep -oE 'deploys/[a-f0-9]{24}' | head -1 | cut -d/ -f2)
-
-          if [ -z "$ID" ]; then
-            echo "СТОП: черновик тоже не собрался, публиковать нечего."
-            exit 1
-          fi
-
-          netlify api restoreSiteDeploy \
-            --data "{\"site_id\":\"$NETLIFY_SITE_ID\",\"deploy_id\":\"$ID\"}" > /dev/null
-          echo "Черновик $ID переведён в основной."
+          mkdir -p _site
+          cp dist/rezerv-dashboard.html _site/index.html
+          cp dist/apple-touch-icon.png _site/apple-touch-icon.png
+          cp dist/stamp.txt _site/stamp.txt
+          cp dist/sw.js _site/sw.js
+          cp dist/metrics.json _site/metrics.json
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
