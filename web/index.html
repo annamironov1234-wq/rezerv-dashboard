@@ -414,20 +414,30 @@ const fmtRub = v => Math.round(v).toLocaleString('ru-RU');
 
 function drawArticleDetail(d, disp){
   const app=document.getElementById('app'); app.innerHTML='';
-  const txns=(d.expense_txns||{})[disp]||[];
-  const months=d.pnl['Все'].months, mL=months.map(m=>mlab(m));
+  const allTxns=(d.expense_txns||{})[disp]||[];
+  const allMonths=d.pnl['Все'].months;
+  // Расшифровка слушается того же фильтра месяца, что и таблица расходов.
+  // Раньше показывала весь год независимо от выбранного месяца: выбираешь
+  // август, проваливаешься в статью - а там выплаты с января.
+  const один = EXP_MONTH!=='all' && allMonths.includes(EXP_MONTH);
+  const months = один ? [EXP_MONTH] : allMonths;
+  const txns = один ? allTxns.filter(t=>t.ym===EXP_MONTH) : allTxns;
+  const mL=months.map(m=>mlab(m));
   const total=txns.reduce((s,t)=>s+t.sum,0);
+  const заПериод = один ? (MONN[EXP_MONTH.slice(5)]+' 2026') : periodLabel(months);
   // назад
   const back=el('button','btn-back','‹ Назад к расходам'); back.onclick=()=>{PAGE='expenses';draw();};
   app.append(back);
   // KPI
   const kp=el('div','kpis');
-  kp.innerHTML=`<div class="kpi accent"><div class="lab">${disp}</div><div class="val">${fmt(total)} <small>тыс ₽</small></div><div class="sub">${txns.length} выплат · ${periodLabel(months)}</div></div>`;
+  kp.innerHTML=`<div class="kpi accent"><div class="lab">${disp}</div><div class="val">${fmt(total)} <small>тыс ₽</small></div><div class="sub">${txns.length} выплат · ${заПериод}</div></div>`;
   app.append(kp);
   // мини-график по месяцам
   const bym={}; months.forEach(m=>bym[m]=0); txns.forEach(t=>{if(bym[t.ym]!=null)bym[t.ym]+=t.sum;});
   const max=Math.max(...months.map(m=>bym[m]),1);
-  const card1=el('div','card'); card1.append(el('div','hd','<h2>По месяцам</h2><span class="note">тыс ₽</span>'));
+  const card1=el('div','card'); card1.append(el('div','hd',
+    один ? `<h2>${заПериод}</h2><span class="note">тыс ₽ · показан выбранный месяц</span>`
+         : '<h2>По месяцам</h2><span class="note">тыс ₽</span>'));
   const cb=el('div','chartwrap'); let bars='';
   const bw=44,gap=26,H=150,padB=26,padT=10,W=Math.max(months.length*(bw+gap)+20,300);
   months.forEach((m,i)=>{const x=10+i*(bw+gap),h=(bym[m]/max)*(H-padT-padB),y=H-padB-h;
