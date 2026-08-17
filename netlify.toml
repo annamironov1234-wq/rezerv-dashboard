@@ -1,0 +1,57 @@
+# Дашборд Резерв Сил на Netlify.
+#
+# Главное отличие от прежнего GitHub Pages: цифры больше не лежат в статике.
+# Каталог private/ НЕ публикуется - до него дотягиваются только функции,
+# и только предъявив пропуск.
+
+[build]
+  publish = "_site"
+  command = "echo 'сборку делает GitHub Actions, тут собирать нечего'"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # Кладём приватный каталог внутрь функций. В publish он не попадает,
+  # поэтому статикой не отдаётся ни при каких условиях.
+  included_files = ["private/**"]
+
+# Сам дашборд. Отдаётся функцией после проверки пропуска, не статикой.
+[[redirects]]
+  from = "/app"
+  to = "/.netlify/functions/app"
+  status = 200
+
+# Короткие адреса вместо длинных /.netlify/functions/...
+[[redirects]]
+  from = "/api/login"
+  to = "/.netlify/functions/login"
+  status = 200
+
+[[redirects]]
+  from = "/api/data"
+  to = "/.netlify/functions/data"
+  status = 200
+
+[[redirects]]
+  from = "/api/metrics"
+  to = "/.netlify/functions/metrics"
+  status = 200
+
+[[redirects]]
+  from = "/api/stamp"
+  to = "/.netlify/functions/stamp"
+  status = 200
+
+# Страницу и её оболочку не кэшируем: иначе после обновления
+# на телефоне неделю висит вчерашнее.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+    Referrer-Policy = "no-referrer"
+    X-Content-Type-Options = "nosniff"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-store"

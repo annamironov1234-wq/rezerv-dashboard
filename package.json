@@ -1,0 +1,9 @@
+{
+  "name": "rezerv-dashboard",
+  "private": true,
+  "type": "module",
+  "description": "Финансовый дашборд Резерв Сил. Данные за паролем, функции Netlify.",
+  "engines": {
+    "node": ">=20"
+  }
+}
