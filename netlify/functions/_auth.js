@@ -66,12 +66,23 @@ export function readTicket(ticket) {
   }
 }
 
-/** Пропуск из заголовка Cookie. */
+/**
+ * Пропуск из заголовка Cookie.
+ *
+ * Имя латиницей и никак иначе: по RFC 6265 имя cookie - ASCII-токен,
+ * кириллическое браузер выбрасывает молча. Читаем и старое имя тоже,
+ * чтобы у того, кто успел войти до правки, ничего не отвалилось.
+ */
+export const ИМЯ_COOKIE = 'propusk';
+
 export function ticketFromRequest(request) {
   const raw = request.headers.get('cookie') || '';
   for (const part of raw.split(';')) {
     const [k, ...v] = part.trim().split('=');
-    if (k === 'пропуск') return readTicket(decodeURIComponent(v.join('=')));
+    if (k === ИМЯ_COOKIE || k === 'пропуск') {
+      const t = readTicket(decodeURIComponent(v.join('=')));
+      if (t) return t;
+    }
   }
   return null;
 }

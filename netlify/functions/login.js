@@ -44,9 +44,14 @@ export default async (request) => {
     status: 200,
     headers: {
       'content-type': 'application/json; charset=utf-8',
+      // Имя строго латиницей. По стандарту (RFC 6265) имя cookie - это токен
+      // из ASCII, и «пропуск» кириллицей браузер молча выбрасывает: пароль
+      // принимается, пропуск не сохраняется, человека возвращает на форму,
+      // и выглядит это как «пароль не подошёл». Проверено 17.08.2026.
+      //
       // HttpOnly: пропуск не виден скриптам на странице
       // SameSite=Lax: не уедет на чужой сайт
-      'set-cookie': `пропуск=${encodeURIComponent(пропуск)}; Path=/; Max-Age=${30 * 86400}; HttpOnly; Secure; SameSite=Lax`,
+      'set-cookie': `propusk=${encodeURIComponent(пропуск)}; Path=/; Max-Age=${30 * 86400}; HttpOnly; Secure; SameSite=Lax`,
     },
   });
 };
