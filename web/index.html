@@ -56,7 +56,14 @@
   .ok{color:var(--good-2);font-weight:700}
   .warn-inline{background:#fff4d6;color:#7a5b00;border:1px solid #ffe08a;border-radius:5px;padding:.1rem .5rem;font-weight:700;font-size:.7rem}
   .warn{background:#fff4d6;color:#7a5b00;border:1px solid #ffe08a;border-radius:6px;padding:.4rem .7rem;font-weight:600}
+  .podbor-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.9rem}
+  .podbor-nav{display:flex;align-items:center;gap:.7rem}
+  .podbor-date{font-size:1.05rem;font-weight:800;color:var(--deep)}
+  .podbor-updated{font-size:.72rem;color:var(--muted)}
+  .btn-podbor{background:var(--surface);border:1px solid var(--blue);color:var(--blue);border-radius:7px;padding:.4rem .85rem;font:inherit;font-size:.82rem;font-weight:700;cursor:pointer}
+  .btn-podbor:hover{background:var(--blue);color:#fff}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem;margin-bottom:1rem}
+  .kpis-3{grid-template-columns:repeat(3,1fr)}
   @media(max-width:780px){.kpis{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:460px){.kpis{grid-template-columns:1fr}}
   .kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:.8rem .9rem;position:relative;overflow:hidden}
@@ -1161,25 +1168,27 @@ async function podborLoad(){
     '<td>'+o.место+'</td><td>'+o.нужно+'</td><td>'+o.набрано+'</td>'+
     '<td>'+o.неХватает+'</td><td>'+o.закрытоТекст+'</td><td>'+(o.резерв||'')+'</td></tr>';
 
-  const kpi=(lab,val,acc)=>'<div class="kpi'+(acc?' accent':'')+'"><div class="lab">'+lab+'</div><div class="val">'+val+'</div></div>';
+  const kpi=(lab,val,sub,acc)=>'<div class="kpi'+(acc?' accent':'')+'"><div class="lab">'+lab+'</div><div class="val">'+val+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
   app.innerHTML =
-    '<div class="kpis">'+
-      kpi('объектов работает', d.объектовРаботает, true)+
+    '<div class="podbor-top">'+
+      '<div class="podbor-nav">'+
+        '<button class="btn-podbor" onclick="podborDate=podborShift(-1);podborLoad()">‹ вчера</button>'+
+        '<span class="podbor-date">'+d.дата+'</span>'+
+        '<button class="btn-podbor" onclick="podborDate=null;podborLoad()">сегодня ›</button>'+
+      '</div>'+
+      '<div class="podbor-updated">обновлено '+(d.обновлено||'')+'</div>'+
+    '</div>'+
+    '<div class="kpis kpis-3">'+
+      kpi('объектов', d.объектовРаботает, d.объектовБезЗаказа?d.объектовБезЗаказа+' без заказа':'', true)+
       kpi('нужно людей', d.нужно)+
-      kpi('набрано', d.набрано)+
-      kpi('осталось найти', d.осталосьНайти)+
-      kpi('закрыто', d.набрано+' из '+d.нужно+' · '+d.закрытоТекст)+
+      kpi('набрано / осталось', d.набрано+' / '+d.осталосьНайти, 'закрыто '+d.закрытоТекст)+
     '</div>'+
     (d.резерв?'<p>в резерве: '+d.резерв+'</p>':'')+
-    (d.объектовБезЗаказа?'<p>объектов без заказа: '+d.объектовБезЗаказа+'</p>':'')+
     (d.итогСверяется?'<p class="err">итог сверяется</p>':'')+
     (d.изАрхива?'<p><i>данные из истории, не сегодняшние живые</i></p>':'')+
     '<div class="scroll"><table><thead><tr>'+
       '<th>Объект</th><th>Нужно</th><th>Набрано</th><th>Не хватает</th><th>Закрыто</th><th>Резерв</th>'+
-    '</tr></thead><tbody>'+d.объекты.map(строка).join('')+'</tbody></table></div>'+
-    '<p><button class="btn" onclick="podborDate=podborShift(-1);podborLoad()">‹ вчера</button> '+
-       '<button class="btn" onclick="podborDate=null;podborLoad()">сегодня ›</button> '+
-       '<span style="margin-left:.8rem;color:var(--muted)">'+d.дата+', обновлено '+(d.обновлено||'')+'</span></p>';
+    '</tr></thead><tbody>'+d.объекты.map(строка).join('')+'</tbody></table></div>';
 }
 
 function podborStart(){
