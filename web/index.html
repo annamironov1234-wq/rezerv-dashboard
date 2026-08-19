@@ -154,6 +154,8 @@
   .err{padding:2rem;text-align:center;color:var(--crimson);font-weight:600}
   #alerts{margin:.2rem 0 .6rem}
   .alert{background:#fff4d6;border:1px solid #ffcf5a;border-left:5px solid #e0a400;border-radius:8px;padding:.7rem 1rem;color:#5a4300;font-size:.86rem}
+  .alert-x{cursor:pointer;color:#8a6d00;font-weight:700;margin-right:.4rem;user-select:none}
+  .alert-x:hover{color:#5a4300}
   .alert b{color:#7a5b00}
   .alert ul{margin:.35rem 0 0;padding-left:1.1rem}
   .alert li{margin:.15rem 0}
@@ -377,19 +379,38 @@ function periodLabel(months){ if(!months||!months.length)return ''; const a=mont
 
 function renderAlerts(d){
   const box=document.getElementById('alerts'); if(!box) return;
-  const w=[...(d.warnings||[])];
-  // ПРОТУХАНИЕ ДАННЫХ — главный сигнал Анне (решение 04.08).
+  // Предупреждения по содержанию (новые статьи и т.п.) можно скрыть, когда
+  // увидела и разобралась — они не пропадают из данных, просто не маячат
+  // на экране, пока не появится НОВЫЙ текст. Храним прямо в браузере.
+  let скрытые=[]; try{ скрытые=JSON.parse(localStorage.getItem('dash_alerts_ok')||'[]'); }catch(e){}
+  const w=(d.warnings||[]).filter(x=>!скрытые.includes(x));
+
+  // ПРОТУХАНИЕ ДАННЫХ — главный сигнал Анне (решение 04.08). НЕ скрывается
+  // никогда: это защита от тихой поломки автомата, а не информационная
+  // строка. Спрятать насовсем — значит не заметить настоящий сбой позже.
   // Обновление приходит в 07:40 и 19:40, то есть раз в 12 часов. Если прошло больше 20,
   // значит либо будильник не сработал, либо сборка не прошла само-проверку и публикация
   // была отменена. В обоих случаях цифры на экране устарели, и это надо видеть.
+  let stale=null;
   const m=(d.updated_at||'').match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/);
   if(m){ const upd=Date.UTC(+m[3],+m[2]-1,+m[1],+m[4]-3,+m[5]);   // метка в МСК = UTC+3
     const hrs=Math.floor((Date.now()-upd)/3600000);
     if(hrs>=20){ const txt = hrs<48 ? hrs+' ч' : Math.floor(hrs/24)+' дн';
-      w.push('Данные не обновлялись '+txt+'. Обновление не прошло — цифры на экране устарели. '
-             +'Если это не разовый сбой, напишите Клоду.'); } }
-  box.innerHTML = w.length
-    ? '<div class="alert"><b>⚠️ Требует внимания:</b><ul>'+w.map(x=>'<li>'+x+'</li>').join('')+'</ul></div>' : '';
+      stale='Данные не обновлялись '+txt+'. Обновление не прошло — цифры на экране устарели. '
+             +'Если это не разовый сбой, напишите Клоду.'; } }
+
+  if(!w.length && !stale){ box.innerHTML=''; return; }
+  box.innerHTML = '<div class="alert"><b>⚠️ Требует внимания:</b><ul>'+
+    w.map((x,i)=>'<li><span class="alert-x" data-i="'+i+'" title="Скрыть, пока не появится новое">✕</span>'+x+'</li>').join('')+
+    (stale?'<li>'+stale+'</li>':'')+
+    '</ul></div>';
+  box.querySelectorAll('.alert-x').forEach(el=>{
+    el.addEventListener('click',()=>{
+      скрытые.push(w[+el.dataset.i]);
+      localStorage.setItem('dash_alerts_ok', JSON.stringify(скрытые));
+      renderAlerts(d);
+    });
+  });
 }
 
 function draw(){
