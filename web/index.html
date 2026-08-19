@@ -278,7 +278,7 @@
   <div class="tabs">
     <div class="tab active" data-page="pnl">P&amp;L</div>
     <div class="tab" data-page="debt">Дебиторка</div>
-    <div class="tab" data-page="expenses">Расходы</div><div class="tab" data-page="income">По объектам</div>
+    <div class="tab" data-page="expenses">Расходы</div><div class="tab" data-page="income">По объектам</div><div class="tab" data-page="podbor">Подбор</div>
   </div>
   <div id="filters" class="filters"></div>
   <div class="meta">
@@ -346,7 +346,10 @@ function setupTabs(){
   document.querySelectorAll('.tab[data-page]').forEach(t=>{
     t.addEventListener('click',()=>{
       document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-      t.classList.add('active'); PAGE=t.dataset.page; draw();
+      t.classList.add('active'); PAGE=t.dataset.page;
+      // «Подбор» не зависит от DATA (баked P&L) — читает живьём с другого
+      // сервера, поэтому не заходит в draw(), а сама решает, что показать
+      if(PAGE==='podbor'){ podborStart(); } else { podborStop(); draw(); }
     });
   });
 }
@@ -1093,6 +1096,69 @@ document.getElementById('zoom').addEventListener('click',function(){
   big=!big; document.documentElement.style.setProperty('--scale', big?'1.6':'1');
   this.classList.toggle('on',big); this.textContent=big?'Обычно':'Крупно ×2';
 });
+
+/* ── «Подбор» ──────────────────────────────────────────────────────────────
+ * Живой блок, отдельно от P&L: свой сервер (baza.rezervsil.ru), своя дата,
+ * не участвует в DATA/draw(). Поломка здесь не может уронить остальные
+ * вкладки — они как были на baked-данных, так и остаются. */
+const PODBOR_URL='https://baza.rezervsil.ru/.netlify/functions/podbor';
+let podborTimer=null, podborDate=null; // null = сегодня
+
+function podborStop(){ if(podborTimer){ clearInterval(podborTimer); podborTimer=null; } }
+
+function podborShift(дней){
+  const базовая = podborDate
+    ? (()=>{ const [d,m]=podborDate.split('.').map(Number); return new Date(2026,m-1,d); })()
+    : new Date();
+  базовая.setDate(базовая.getDate()+дней);
+  return String(базовая.getDate()).padStart(2,'0')+'.'+String(базовая.getMonth()+1).padStart(2,'0');
+}
+
+async function podborLoad(){
+  const app=document.getElementById('app');
+  const qs = podborDate ? ('?дата='+encodeURIComponent(podborDate)) : '';
+  let d;
+  try{
+    d = await fetch(PODBOR_URL+qs).then(r=>r.json());
+  }catch(e){
+    app.innerHTML='<div class="err">Данные подбора сейчас недоступны</div>';
+    return;
+  }
+  if(d.ошибка){ app.innerHTML='<div class="err">'+d.ошибка+'</div>'; return; }
+
+  const строка = o => '<tr'+(o.неХватает>0?' style="background:#fff3e0"':'')+'>'+
+    '<td>'+o.место+'</td><td>'+o.нужно+'</td><td>'+o.набрано+'</td>'+
+    '<td>'+o.неХватает+'</td><td>'+o.закрытоТекст+'</td><td>'+(o.резерв||'')+'</td></tr>';
+
+  const kpi=(lab,val,acc)=>'<div class="kpi'+(acc?' accent':'')+'"><div class="lab">'+lab+'</div><div class="val">'+val+'</div></div>';
+  app.innerHTML =
+    '<div class="kpis">'+
+      kpi('объектов работает', d.объектовРаботает, true)+
+      kpi('нужно людей', d.нужно)+
+      kpi('набрано', d.набрано)+
+      kpi('осталось найти', d.осталосьНайти)+
+      kpi('закрыто', d.набрано+' из '+d.нужно+' · '+d.закрытоТекст)+
+    '</div>'+
+    (d.резерв?'<p>в резерве: '+d.резерв+'</p>':'')+
+    (d.объектовБезЗаказа?'<p>объектов без заказа: '+d.объектовБезЗаказа+'</p>':'')+
+    (d.итогСверяется?'<p class="err">итог сверяется</p>':'')+
+    (d.изАрхива?'<p><i>данные из истории, не сегодняшние живые</i></p>':'')+
+    '<div class="scroll"><table><thead><tr>'+
+      '<th>Объект</th><th>Нужно</th><th>Набрано</th><th>Не хватает</th><th>Закрыто</th><th>Резерв</th>'+
+    '</tr></thead><tbody>'+d.объекты.map(строка).join('')+'</tbody></table></div>'+
+    '<p><button class="btn" onclick="podborDate=podborShift(-1);podborLoad()">‹ вчера</button> '+
+       '<button class="btn" onclick="podborDate=null;podborLoad()">сегодня ›</button> '+
+       '<span style="margin-left:.8rem;color:var(--muted)">'+d.дата+', обновлено '+(d.обновлено||'')+'</span></p>';
+}
+
+function podborStart(){
+  document.getElementById('filters').style.display='none';
+  document.querySelector('.meta').style.display='none';
+  podborDate=null;
+  podborLoad();
+  podborStop();
+  podborTimer=setInterval(podborLoad,60000); // Т3: раз в минуту, пока вкладка открыта
+}
 </script>
 </body>
 </html>
