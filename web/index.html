@@ -278,9 +278,10 @@
 <div class="wrap">
   <div id="alerts"></div>
   <div class="tabs">
-    <div class="tab active" data-page="pnl">P&amp;L</div>
+    <div class="tab active" data-page="podbor">Набор</div>
+    <div class="tab" data-page="pnl">P&amp;L</div>
     <div class="tab" data-page="debt">Дебиторка</div>
-    <div class="tab" data-page="expenses">Расходы</div><div class="tab" data-page="income">По объектам</div><div class="tab" data-page="podbor">Подбор</div>
+    <div class="tab" data-page="expenses">Расходы</div><div class="tab" data-page="income">По объектам</div>
   </div>
   <div id="filters" class="filters"></div>
   <div class="meta">
@@ -339,19 +340,28 @@ function srcOf(name){ if(SRC[name])return SRC[name];
   if(/налоги самозан/i.test(name))return 'Файл «Доходы-расходы» · статья «Налоги самозанятые»';
   return 'Файл «Доходы-расходы» · лист «РАСХОДы 2026» · статья «'+name+'»'; }
 
-let DATA=null, CUR={ip:'Все',obj:'Все'}, PAGE='pnl';
-fetch('../build/data.json').then(r=>r.json()).then(d=>{DATA=d;INCOMPLETE=d.incomplete_month||'';initFilters(d);setupTabs();draw();}).catch(e=>{
+let DATA=null, CUR={ip:'Все',obj:'Все'}, PAGE='podbor';
+fetch('../build/data.json').then(r=>r.json()).then(d=>{DATA=d;INCOMPLETE=d.incomplete_month||'';initFilters(d);setupTabs();
+  // Сигнал про протухание данных должен быть виден независимо от того, какая
+  // вкладка открыта первой — раньше он жил только внутри draw(), а с «Набором»
+  // по умолчанию draw() может не вызваться вовсе, и предупреждение бы не показалось
+  renderAlerts(d);renderCurrent();}).catch(e=>{
   document.getElementById('app').innerHTML='<div class="err">Не удалось загрузить данные ('+e+')</div>';
 });
+
+// «Набор» (бывший «Подбор») не зависит от DATA (baked P&L) — читает живьём
+// с другого сервера, поэтому не заходит в draw(), а сама решает, что
+// показать. Открывается первой при заходе на дашборд.
+function renderCurrent(){
+  if(PAGE==='podbor'){ podborStart(); } else { podborStop(); draw(); }
+}
 
 function setupTabs(){
   document.querySelectorAll('.tab[data-page]').forEach(t=>{
     t.addEventListener('click',()=>{
       document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
       t.classList.add('active'); PAGE=t.dataset.page;
-      // «Подбор» не зависит от DATA (баked P&L) — читает живьём с другого
-      // сервера, поэтому не заходит в draw(), а сама решает, что показать
-      if(PAGE==='podbor'){ podborStart(); } else { podborStop(); draw(); }
+      renderCurrent();
     });
   });
 }
