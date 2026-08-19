@@ -1141,11 +1141,19 @@ let podborTimer=null, podborDate=null; // null = сегодня
 function podborStop(){ if(podborTimer){ clearInterval(podborTimer); podborTimer=null; } }
 
 function podborShift(дней){
-  const базовая = podborDate
-    ? (()=>{ const [d,m]=podborDate.split('.').map(Number); return new Date(2026,m-1,d); })()
-    : new Date();
+  const [d,m] = podborDate.split('.').map(Number);
+  const базовая = new Date(2026,m-1,d);
   базовая.setDate(базовая.getDate()+дней);
   return String(базовая.getDate()).padStart(2,'0')+'.'+String(базовая.getMonth()+1).padStart(2,'0');
+}
+
+// Менеджеры набирают с утра уже на завтра — открытая по умолчанию дата
+// должна быть завтрашней (по московскому времени, не по часовому поясу
+// браузера), иначе первый экран показывает уже закрытый вчерашний день.
+function podborDefaultDate(){
+  const мск = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/Moscow'}));
+  мск.setDate(мск.getDate()+1);
+  return String(мск.getDate()).padStart(2,'0')+'.'+String(мск.getMonth()+1).padStart(2,'0');
 }
 
 async function podborLoad(){
@@ -1168,9 +1176,9 @@ async function podborLoad(){
   app.innerHTML =
     '<div class="podbor-top">'+
       '<div class="podbor-nav">'+
-        '<button class="btn-podbor" onclick="podborDate=podborShift(-1);podborLoad()">‹ вчера</button>'+
+        '<button class="btn-podbor" onclick="podborDate=podborShift(-1);podborLoad()">‹</button>'+
         '<span class="podbor-date">'+d.дата+'</span>'+
-        '<button class="btn-podbor" onclick="podborDate=null;podborLoad()">сегодня ›</button>'+
+        '<button class="btn-podbor" onclick="podborDate=podborShift(1);podborLoad()">›</button>'+
       '</div>'+
     '</div>'+
     '<div class="kpis kpis-3">'+
@@ -1190,7 +1198,7 @@ async function podborLoad(){
 function podborStart(){
   document.getElementById('filters').style.display='none';
   document.querySelector('.meta').style.display='none';
-  podborDate=null;
+  podborDate=podborDefaultDate();
   podborLoad();
   podborStop();
   podborTimer=setInterval(podborLoad,60000); // Т3: раз в минуту, пока вкладка открыта
