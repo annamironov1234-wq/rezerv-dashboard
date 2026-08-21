@@ -1156,16 +1156,22 @@ function podborDefaultDate(){
   return String(мск.getDate()).padStart(2,'0')+'.'+String(мск.getMonth()+1).padStart(2,'0');
 }
 
+let podborReq=0; // счётчик запросов: пока этот fetch летал, могли уйти с вкладки или переключить дату ещё раз
+
 async function podborLoad(){
+  const req=++podborReq;
   const app=document.getElementById('app');
   const qs = podborDate ? ('?дата='+encodeURIComponent(podborDate)) : '';
   let d;
   try{
     d = await fetch(PODBOR_URL+qs).then(r=>r.json());
   }catch(e){
-    app.innerHTML='<div class="err">Данные подбора сейчас недоступны</div>';
+    if(req===podborReq && PAGE==='podbor') app.innerHTML='<div class="err">Данные подбора сейчас недоступны</div>';
     return;
   }
+  // устаревший ответ (уже не на «Наборе» или дата успела перещёлкнуться) —
+  // не перетираем то, что сейчас реально на экране
+  if(req!==podborReq || PAGE!=='podbor') return;
   if(d.ошибка){ app.innerHTML='<div class="err">'+d.ошибка+'</div>'; return; }
 
   const строка = o => '<tr'+(o.неХватает>0?' style="background:#fff3e0"':'')+'>'+
@@ -1198,6 +1204,7 @@ async function podborLoad(){
 function podborStart(){
   document.getElementById('filters').style.display='none';
   document.querySelector('.meta').style.display='none';
+  document.getElementById('app').innerHTML='<div class="err">Загрузка…</div>';
   podborDate=podborDefaultDate();
   podborLoad();
   podborStop();
