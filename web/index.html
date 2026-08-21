@@ -845,10 +845,18 @@ function drawDebt(d){
     .filter(r=>Math.abs(r.услуги)>=1||Math.abs(r.долг)>=1);
   rows.sort((a,b)=>b.долг-a.долг);
   const sum=k=>rows.reduce((s,r)=>s+(r[k]||0),0);
-  const totalDebt=sum('долг'), totalVat=sum('ндс');
+  const totalVat=sum('ндс'), totalDebt=sum('долг');   // totalDebt — только для строки ИТОГО таблицы
+  // Долги и предоплаты — разные вещи, складывать их в одну цифру нельзя.
+  //
+  // 21.08.2026: ЗетТЕК заплатил вперёд 8,8 млн, и «Общая дебиторка» стала
+  // −8,6 млн. Одна предоплата перекрыла долги всех остальных клиентов, и с
+  // экрана пропало то, ради чего вкладка нужна: сколько нам должны.
+  const totalOwed=rows.reduce((s,r)=>s+(r.долг>0?r.долг:0),0);
+  const totalPre =rows.reduce((s,r)=>s+(r.долг<0?-r.долг:0),0);
   const kp=el('div','kpis');
-  kp.innerHTML=`<div class="kpi accent"><div class="lab">Общая дебиторка</div><div class="val">${fmt(totalDebt)} <small>тыс ₽</small></div><div class="sub">недоплата по услугам</div></div>`+
-    `<div class="kpi"><div class="lab">Клиентов с долгом</div><div class="val">${rows.filter(r=>r.долг>=1000).length}</div><div class="sub">недоплата ≥ 1 тыс</div></div>`;
+  kp.innerHTML=`<div class="kpi accent"><div class="lab">Должны нам</div><div class="val">${fmt(totalOwed)} <small>тыс ₽</small></div><div class="sub">недоплата по услугам</div></div>`+
+    `<div class="kpi"><div class="lab">Клиентов с долгом</div><div class="val">${rows.filter(r=>r.долг>=1000).length}</div><div class="sub">недоплата ≥ 1 тыс</div></div>`+
+    (totalPre>=1000?`<div class="kpi"><div class="lab">Заплатили вперёд</div><div class="val">${fmt(totalPre)} <small>тыс ₽</small></div><div class="sub">${rows.filter(r=>r.долг<=-1000).length} клиентов с предоплатой</div></div>`:'');
   app.append(kp);
   const card=el('div','card'); card.append(el('div','hd','<h2>Дебиторка по клиентам</h2><span class="note">тыс ₽ · из первички (клиентские листы)</span>'));
   const sc=el('div','scroll'),tb=el('table'),thead=el('thead'),hr=el('tr');
