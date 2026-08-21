@@ -1164,7 +1164,8 @@ function podborDefaultDate(){
   return String(мск.getDate()).padStart(2,'0')+'.'+String(мск.getMonth()+1).padStart(2,'0');
 }
 
-let podborReq=0; // счётчик запросов: пока этот fetch летал, могли уйти с вкладки или переключить дату ещё раз
+let podborReq=0;      // счётчик запросов: пока этот fetch летал, могли уйти с вкладки или переключить дату ещё раз
+let podborОткат=false; // уже откатились с «завтра» на «сегодня» — второй раз не пробуем
 
 async function podborLoad(){
   const req=++podborReq;
@@ -1180,7 +1181,20 @@ async function podborLoad(){
   // устаревший ответ (уже не на «Наборе» или дата успела перещёлкнуться) —
   // не перетираем то, что сейчас реально на экране
   if(req!==podborReq || PAGE!=='podbor') return;
-  if(d.ошибка){ app.innerHTML='<div class="err">'+d.ошибка+'</div>'; return; }
+  if(d.ошибка){
+    // Листа на завтра ещё нет — это норма до того, как нажали «Дублировать
+    // на завтра». Показывать собственнику красную ошибку первым экраном
+    // нельзя: 21.08.2026 Дмитрий открывал дашборд и видел «Лист на эту дату
+    // не создан» вместо цифр. Молча откатываемся на сегодня и говорим об этом.
+    if(!podborОткат && podborDate===podborDefaultDate()){
+      podborОткат=true;
+      podborDate=podborShift(-1);
+      return podborLoad();
+    }
+    app.innerHTML='<div class="err">'+d.ошибка+'</div>';
+    setHdrUpdated(DATA&&DATA.updated_at?DATA.updated_at:'—');
+    return;
+  }
 
   const строка = o => '<tr'+(o.неХватает>0?' style="background:#fff3e0"':'')+'>'+
     '<td>'+o.место+'</td><td>'+o.нужно+'</td><td>'+o.набрано+'</td>'+
@@ -1214,6 +1228,7 @@ function podborStart(){
   document.querySelector('.meta').style.display='none';
   document.getElementById('app').innerHTML='<div class="err">Загрузка…</div>';
   podborDate=podborDefaultDate();
+  podborОткат=false;   // при каждом заходе на вкладку пробуем завтра заново
   podborLoad();
   podborStop();
   podborTimer=setInterval(podborLoad,60000); // Т3: раз в минуту, пока вкладка открыта
