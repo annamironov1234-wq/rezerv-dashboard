@@ -1148,6 +1148,24 @@ let podborTimer=null, podborDate=null; // null = сегодня
 
 function podborStop(){ if(podborTimer){ clearInterval(podborTimer); podborTimer=null; } }
 
+/* Запасные цифры набора, зашитые в страницу при сборке.
+ *
+ * 21.08.2026: на телефоне Анны вкладка не открывалась, хотя P&L и Дебиторка
+ * работали. Разница в том, что те цифры лежат в самой странице, а Набор
+ * тянется живьём с другого сервера — и вкладка целиком зависела от того,
+ * пустит ли туда конкретное устройство или сеть. Молча отваливалась.
+ *
+ * Теперь при сборке в страницу кладётся снимок: живого сервера нет — на
+ * экране последние известные цифры с честной подписью, когда они сняты. */
+function podborИзЗапаса(app){
+  const з = DATA && DATA.podbor_snapshot;
+  if(!з || !з.объекты || !з.объекты.length){
+    app.innerHTML='<div class="err">Данные подбора сейчас недоступны</div>';
+    return;
+  }
+  podborРисовать(app, з, `запасные цифры на ${з.снято||'—'} · живой сервер не отвечает`);
+}
+
 function podborShift(дней){
   const [d,m] = podborDate.split('.').map(Number);
   const базовая = new Date(2026,m-1,d);
@@ -1173,9 +1191,17 @@ async function podborLoad(){
   const qs = podborDate ? ('?дата='+encodeURIComponent(podborDate)) : '';
   let d;
   try{
-    d = await fetch(PODBOR_URL+qs).then(r=>r.json());
+    // Ждём не дольше десяти секунд. 21.08.2026 на телефоне Анны вкладка
+    // висела на «Загрузка…» бесконечно: запрос к живому серверу не
+    // отваливался и не доходил. Висящая надпись хуже честной ошибки —
+    // непонятно, сломалось или ещё думает.
+    const стоп=new AbortController();
+    const таймер=setTimeout(()=>стоп.abort(),10000);
+    try{
+      d = await fetch(PODBOR_URL+qs,{signal:стоп.signal}).then(r=>r.json());
+    } finally { clearTimeout(таймер); }
   }catch(e){
-    if(req===podborReq && PAGE==='podbor') app.innerHTML='<div class="err">Данные подбора сейчас недоступны</div>';
+    if(req===podborReq && PAGE==='podbor') podborИзЗапаса(app);
     return;
   }
   // устаревший ответ (уже не на «Наборе» или дата успела перещёлкнуться) —
@@ -1196,6 +1222,13 @@ async function podborLoad(){
     return;
   }
 
+  podborРисовать(app, d, '');
+  setHdrUpdated(d.дата+' '+(d.обновлено||''));
+}
+
+/* Одна отрисовка и для живых цифр, и для запасных — чтобы они не разъезжались.
+   пометка непуста, когда цифры не живые. */
+function podborРисовать(app, d, пометка){
   const строка = o => '<tr'+(o.неХватает>0?' style="background:#fff3e0"':'')+'>'+
     '<td>'+o.место+'</td><td>'+o.нужно+'</td><td>'+o.набрано+'</td>'+
     '<td>'+o.неХватает+'</td><td>'+o.закрытоТекст+'</td><td>'+(o.резерв||'')+'</td></tr>';
@@ -1204,11 +1237,12 @@ async function podborLoad(){
   app.innerHTML =
     '<div class="podbor-top">'+
       '<div class="podbor-nav">'+
-        '<button class="btn-podbor" onclick="podborDate=podborShift(-1);podborLoad()">‹</button>'+
+        (пометка?'':'<button class="btn-podbor" onclick="podborDate=podborShift(-1);podborLoad()">‹</button>')+
         '<span class="podbor-date">'+d.дата+'</span>'+
-        '<button class="btn-podbor" onclick="podborDate=podborShift(1);podborLoad()">›</button>'+
+        (пометка?'':'<button class="btn-podbor" onclick="podborDate=podborShift(1);podborLoad()">›</button>')+
       '</div>'+
     '</div>'+
+    (пометка?'<p class="warn-inline">'+пометка+'</p>':'')+
     '<div class="kpis kpis-3">'+
       kpi('объектов', d.объектовРаботает, d.объектовБезЗаказа?d.объектовБезЗаказа+' без заказа':'', true)+
       kpi('нужно людей', d.нужно)+
@@ -1219,8 +1253,7 @@ async function podborLoad(){
     (d.изАрхива?'<p><i>данные из истории, не сегодняшние живые</i></p>':'')+
     '<div class="scroll"><table><thead><tr>'+
       '<th>Объект</th><th>Нужно</th><th>Набрано</th><th>Не хватает</th><th>Закрыто</th><th>Резерв</th>'+
-    '</tr></thead><tbody>'+d.объекты.map(строка).join('')+'</tbody></table></div>';
-  setHdrUpdated(d.дата+' '+(d.обновлено||''));
+    '</tr></thead><tbody>'+(d.объекты||[]).map(строка).join('')+'</tbody></table></div>';
 }
 
 function podborStart(){

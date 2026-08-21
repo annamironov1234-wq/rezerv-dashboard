@@ -13,6 +13,47 @@ CONTROL_REVENUE_JANJUN = 130312854   # контроль сверки (метод
 OUT = C.DASH / "build" / "data.json"
 
 
+PODBOR_URL = "https://baza.rezervsil.ru/.netlify/functions/podbor"
+
+
+def _podbor_snapshot(now):
+    """Снимок набора — запасные цифры прямо в странице.
+
+    21.08.2026: на телефоне Анны вкладка «Набор» не открывалась, хотя P&L и
+    Дебиторка работали. Разница в том, что те цифры зашиты в страницу, а
+    Набор тянется живьём с другого сервера, и вкладка целиком зависела от
+    того, пустит ли туда конкретное устройство. Отваливалась молча.
+
+    Теперь при сборке кладём снимок: нет живого сервера — на экране
+    последние известные цифры с честной подписью, когда они сняты.
+
+    Сборку это уронить не должно: снимок приятно иметь, но дашборд без него
+    полноценен, а падать из-за необязательного — плохой размен.
+    """
+    # Через curl, а не requests/urllib. На Python 3.9 с LibreSSL 2.8.3 (Mac
+    # Анны) оба рвут соединение с этим сервером: «EOF occurred in violation of
+    # protocol». curl с тем же адресом работает и там, и на сборочной машине.
+    import subprocess
+    import urllib.parse
+    сегодня = now.strftime("%d.%m")
+    адрес = f"{PODBOR_URL}?{urllib.parse.urlencode({'дата': сегодня})}"
+    try:
+        готово = subprocess.run(["curl", "-sS", "--max-time", "20", адрес],
+                                capture_output=True, text=True, timeout=30)
+        if готово.returncode != 0:
+            raise RuntimeError(готово.stderr.strip()[:120] or f"curl вернул {готово.returncode}")
+        снимок = json.loads(готово.stdout)
+    except Exception as e:                      # сеть, таймаут, кривой ответ
+        print(f"   снимок набора не снялся ({e}) — вкладка будет только живой")
+        return None
+    if снимок.get("ошибка") or not снимок.get("объекты"):
+        print(f"   снимок набора пуст: {снимок.get('ошибка', 'нет объектов')}")
+        return None
+    снимок["снято"] = now.strftime("%d.%m %H:%M")
+    print(f"   снимок набора: {сегодня}, объектов {len(снимок['объекты'])}")
+    return снимок
+
+
 def _prev_metrics():
     """Слепок цифр прошлой ОПУБЛИКОВАННОЙ сборки. Недоступен (первый прогон,
     нет сети) — сравнение просто не делаем, остальные проверки работают."""
@@ -166,6 +207,7 @@ def main():
     # жёлтый баннер «данные не обновлялись» — это и есть сигнал Анне.
     md = getattr(inc, "max_date", None)          # свежесть исходника: сколько дней без новых строк
     data["source_stale_days"] = (now.date() - md).days if md else None
+    data["podbor_snapshot"] = _podbor_snapshot(now)
     prev = _prev_metrics()
     stops, notes = checks.run(data, prev)
     data["warnings"] = notes
