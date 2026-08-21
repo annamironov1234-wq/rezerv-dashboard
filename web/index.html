@@ -59,6 +59,21 @@
   .podbor-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.9rem}
   .podbor-nav{display:flex;align-items:center;gap:.7rem}
   .podbor-date{font-size:1.05rem;font-weight:800;color:var(--deep)}
+  /* список людей объекта — раскрывается нажатием на строку */
+  tr.кликабельный{cursor:pointer}
+  tr.кликабельный:hover{background:var(--tint)!important}
+  .стрелка{display:inline-block;width:.9em;color:var(--muted);font-size:.8em}
+  tr.люди>td{background:var(--surface-2);padding:.5rem .7rem}
+  .человек{padding:.28rem 0;border-bottom:1px solid var(--line);font-size:.82rem;
+    display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+  .человек:last-child{border-bottom:none}
+  .человек .имя{font-weight:700}
+  .человек .комм{color:var(--ink-2);font-style:italic}
+  .метка{font-size:.66rem;font-weight:700;border-radius:4px;padding:.1rem .4rem;
+    background:var(--tint);color:var(--ink-2);white-space:nowrap}
+  .метка.смз{background:#e3f0e8;color:var(--good)}
+  .метка.вним{background:#fff4d6;color:#7a5b00}
+  .метка.стоп{background:#fde8ea;color:var(--crimson)}
   .btn-podbor{background:var(--surface);border:1px solid var(--blue);color:var(--blue);border-radius:7px;padding:.4rem .85rem;font:inherit;font-size:.82rem;font-weight:700;cursor:pointer}
   .btn-podbor:hover{background:var(--blue);color:#fff}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem;margin-bottom:1rem}
@@ -1188,6 +1203,7 @@ function podborDefaultDate(){
 
 let podborReq=0;      // счётчик запросов: пока этот fetch летал, могли уйти с вкладки или переключить дату ещё раз
 let podborОткат=false; // уже откатились с «завтра» на «сегодня» — второй раз не пробуем
+const podborОткрытые=new Set(); // какие объекты раскрыты: переживает перерисовку раз в минуту
 
 async function podborLoad(){
   const req=++podborReq;
@@ -1233,9 +1249,34 @@ async function podborLoad(){
 /* Одна отрисовка и для живых цифр, и для запасных — чтобы они не разъезжались.
    пометка непуста, когда цифры не живые. */
 function podborРисовать(app, d, пометка){
-  const строка = o => '<tr'+(o.неХватает>0?' style="background:#fff3e0"':'')+'>'+
-    '<td>'+o.место+'</td><td>'+o.нужно+'</td><td>'+o.набрано+'</td>'+
-    '<td>'+o.неХватает+'</td><td>'+o.закрытоТекст+'</td><td>'+(o.резерв||'')+'</td></tr>';
+  // Нажатие на объект раскрывает, кто на него набран.
+  // Анна 21.08.2026: «нажимаю на объект — хочу видеть, кто эти люди».
+  const эк = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const человек = ч => {
+    const метки=[];
+    if(ч.смз) метки.push('<span class="метка смз">'+эк(ч.смз)+'</span>');
+    if(ч.отметка) метки.push('<span class="метка">'+эк(ч.отметка)+'</span>');
+    if(ч.пометка) метки.push('<span class="метка '+(ч.статус==='стоп'?'стоп':'вним')+'">'+эк(ч.пометка)+'</span>');
+    return '<div class="человек">'+
+      '<span class="имя">'+эк(ч.фио)+'</span>'+
+      (метки.length?' '+метки.join(' '):'')+
+      (ч.комментарий?'<span class="комм">'+эк(ч.комментарий)+'</span>':'')+
+    '</div>';
+  };
+  const строка = (o,i) => {
+    const люди=(o.люди||[]);
+    const шапкаСтроки='<tr class="объект'+(люди.length?' кликабельный':'')+'"'+
+      (люди.length?' onclick="podborРаскрыть('+i+')"':'')+
+      (o.неХватает>0?' style="background:#fff3e0"':'')+'>'+
+      '<td>'+(люди.length?'<span class="стрелка" id="стрелка'+i+'">▸</span> ':'')+эк(o.место)+'</td>'+
+      '<td>'+o.нужно+'</td><td>'+o.набрано+'</td>'+
+      '<td>'+o.неХватает+'</td><td>'+o.закрытоТекст+'</td><td>'+(o.резерв||'')+'</td></tr>';
+    const раскрытие=люди.length
+      ? '<tr class="люди" id="люди'+i+'" style="display:none"><td colspan="6">'+
+          люди.map(человек).join('')+'</td></tr>'
+      : '';
+    return шапкаСтроки+раскрытие;
+  };
 
   const kpi=(lab,val,sub,acc)=>'<div class="kpi'+(acc?' accent':'')+'"><div class="lab">'+lab+'</div><div class="val">'+val+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
   app.innerHTML =
@@ -1258,6 +1299,28 @@ function podborРисовать(app, d, пометка){
     '<div class="scroll"><table><thead><tr>'+
       '<th>Объект</th><th>Нужно</th><th>Набрано</th><th>Не хватает</th><th>Закрыто</th><th>Резерв</th>'+
     '</tr></thead><tbody>'+(d.объекты||[]).map(строка).join('')+'</tbody></table></div>';
+  podborВернутьРаскрытые();
+}
+
+/* Раскрыть или свернуть список людей объекта. Отдельной функцией, а не через
+   обработчик на каждой строке: таблица перерисовывается раз в минуту, и живые
+   обработчики пришлось бы вешать заново каждый раз. */
+function podborРаскрыть(i){
+  const ряд=document.getElementById('люди'+i), стр=document.getElementById('стрелка'+i);
+  if(!ряд) return;
+  const открыт=ряд.style.display!=='none';
+  ряд.style.display=открыт?'none':'table-row';
+  if(стр) стр.textContent=открыт?'▸':'▾';
+  // Таблица перерисовывается раз в минуту. Без этой памяти раскрытый список
+  // схлопывался бы прямо под рукой у того, кто его читает.
+  if(открыт) podborОткрытые.delete(i); else podborОткрытые.add(i);
+}
+
+function podborВернутьРаскрытые(){
+  podborОткрытые.forEach(i=>{
+    const ряд=document.getElementById('люди'+i), стр=document.getElementById('стрелка'+i);
+    if(ряд){ ряд.style.display='table-row'; if(стр) стр.textContent='▾'; }
+  });
 }
 
 function podborStart(){
