@@ -16,6 +16,26 @@ OUT = C.DASH / "build" / "data.json"
 PODBOR_URL = "https://baza.rezervsil.ru/.netlify/functions/podbor"
 
 
+def _podbor_one(адрес, дата):
+    """Один день набора с живого сервера. None, если не вышло."""
+    import subprocess
+    import urllib.parse
+    полный = f"{адрес}?{urllib.parse.urlencode({'дата': дата})}"
+    try:
+        готово = subprocess.run(["curl", "-sS", "--max-time", "20", полный],
+                                capture_output=True, text=True, timeout=30)
+        if готово.returncode != 0:
+            raise RuntimeError(готово.stderr.strip()[:120] or f"curl вернул {готово.returncode}")
+        снимок = json.loads(готово.stdout)
+    except Exception as e:
+        print(f"   снимок {дата} не снялся ({e})")
+        return None
+    if снимок.get("ошибка") or not снимок.get("объекты"):
+        print(f"   снимок {дата}: {снимок.get('ошибка', 'нет объектов')}")
+        return None
+    return снимок
+
+
 def _podbor_snapshot(now):
     """Снимок набора — запасные цифры прямо в странице.
 
@@ -29,29 +49,28 @@ def _podbor_snapshot(now):
 
     Сборку это уронить не должно: снимок приятно иметь, но дашборд без него
     полноценен, а падать из-за необязательного — плохой размен.
+
+    Снимаем ДВА дня, сегодня и завтра. 21.08.2026, вечер: клала только
+    сегодняшний, а вкладка по умолчанию открывает завтрашний — снимок не
+    совпадал с тем, что человек смотрит, никогда. Анна открыла телефон, когда
+    на 22-е уже набирали, и увидела 21-е.
     """
-    # Через curl, а не requests/urllib. На Python 3.9 с LibreSSL 2.8.3 (Mac
-    # Анны) оба рвут соединение с этим сервером: «EOF occurred in violation of
-    # protocol». curl с тем же адресом работает и там, и на сборочной машине.
-    import subprocess
-    import urllib.parse
     сегодня = now.strftime("%d.%m")
-    адрес = f"{PODBOR_URL}?{urllib.parse.urlencode({'дата': сегодня})}"
-    try:
-        готово = subprocess.run(["curl", "-sS", "--max-time", "20", адрес],
-                                capture_output=True, text=True, timeout=30)
-        if готово.returncode != 0:
-            raise RuntimeError(готово.stderr.strip()[:120] or f"curl вернул {готово.returncode}")
-        снимок = json.loads(готово.stdout)
-    except Exception as e:                      # сеть, таймаут, кривой ответ
-        print(f"   снимок набора не снялся ({e}) — вкладка будет только живой")
+    завтра = (now + datetime.timedelta(days=1)).strftime("%d.%m")
+    снято = now.strftime("%d.%m %H:%M")
+
+    дни = {}
+    for дата in (завтра, сегодня):              # завтра важнее: его и показываем по умолчанию
+        один = _podbor_one(PODBOR_URL, дата)
+        if один:
+            один["снято"] = снято
+            дни[дата] = один
+
+    if not дни:
+        print("   снимок набора не снялся — вкладка будет только живой")
         return None
-    if снимок.get("ошибка") or not снимок.get("объекты"):
-        print(f"   снимок набора пуст: {снимок.get('ошибка', 'нет объектов')}")
-        return None
-    снимок["снято"] = now.strftime("%d.%m %H:%M")
-    print(f"   снимок набора: {сегодня}, объектов {len(снимок['объекты'])}")
-    return снимок
+    print(f"   снимок набора: {', '.join(дни)} (снято {снято})")
+    return {"снято": снято, "дни": дни}
 
 
 def _prev_metrics():

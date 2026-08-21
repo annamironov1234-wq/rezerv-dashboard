@@ -1159,11 +1159,15 @@ function podborStop(){ if(podborTimer){ clearInterval(podborTimer); podborTimer=
  * экране последние известные цифры с честной подписью, когда они сняты. */
 function podborИзЗапаса(app){
   const з = DATA && DATA.podbor_snapshot;
-  if(!з || !з.объекты || !з.объекты.length){
+  const дни = з && з.дни;
+  if(!дни || !Object.keys(дни).length){
     app.innerHTML='<div class="err">Данные подбора сейчас недоступны</div>';
     return;
   }
-  podborРисовать(app, з, `запасные цифры на ${з.снято||'—'} · живой сервер не отвечает`);
+  // Берём запрошенный день; нет его — самый свежий из того, что сняли.
+  const д = дни[podborDate] || дни[Object.keys(дни).sort().pop()];
+  podborРисовать(app, д, `запасные цифры на ${д.снято||з.снято||'—'} · живой сервер не отвечает`);
+  setHdrUpdated((д.дата||'')+' запасные');
 }
 
 function podborShift(дней){
