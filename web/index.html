@@ -78,6 +78,18 @@
   .btn-podbor:hover{background:var(--blue);color:#fff}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem;margin-bottom:1rem}
   .kpis-3{grid-template-columns:repeat(3,1fr)}
+  /* Статистика: воронка ступенями и столбики с подписями. */
+  .ступень{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center;margin-bottom:8px}
+  .ступень .имя{font-size:.85rem;color:var(--ink-2);text-align:right}
+  .ступень .полоса{height:34px;border-radius:7px;display:inline-flex;align-items:center;
+    padding:0 11px;color:#fff;font-weight:800;font-size:1rem;min-width:52px;white-space:nowrap}
+  .ступень .рядом{color:var(--muted);font-size:.78rem;margin-left:9px}
+  @media(max-width:560px){.ступень{grid-template-columns:1fr}.ступень .имя{text-align:left}}
+  .стат-ряд{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-bottom:.8rem}
+  .стат-ряд .btn-podbor.on{background:var(--deep);color:#fff}
+  .легенда{display:flex;gap:1rem;flex-wrap:wrap;font-size:.8rem;color:var(--ink-2);margin-top:.4rem}
+  .легенда i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+  .поясн{font-size:.8rem;color:var(--muted);margin:.1rem 0 .7rem}
   @media(max-width:780px){.kpis{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:460px){.kpis{grid-template-columns:1fr}}
   .kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:.8rem .9rem;position:relative;overflow:hidden}
@@ -299,6 +311,7 @@
   <div id="alerts"></div>
   <div class="tabs">
     <div class="tab active" data-page="podbor">Набор</div>
+    <div class="tab" data-page="stat">Статистика</div>
     <div class="tab" data-page="pnl">P&amp;L</div>
     <div class="tab" data-page="debt">Дебиторка</div>
     <div class="tab" data-page="expenses">Расходы</div><div class="tab" data-page="income">По объектам</div>
@@ -373,7 +386,9 @@ fetch('../build/data.json').then(r=>r.json()).then(d=>{DATA=d;INCOMPLETE=d.incom
 // с другого сервера, поэтому не заходит в draw(), а сама решает, что
 // показать. Открывается первой при заходе на дашборд.
 function renderCurrent(){
-  if(PAGE==='podbor'){ podborStart(); } else { podborStop(); draw(); setHdrUpdated(DATA.updated_at); }
+  if(PAGE==='podbor'){ podborStop(); statStop(); podborStart(); }
+  else if(PAGE==='stat'){ podborStop(); statStart(); }
+  else { podborStop(); statStop(); draw(); setHdrUpdated(DATA.updated_at); }
 }
 
 function setupTabs(){
@@ -1152,6 +1167,170 @@ setTimeout(checkFresh,1200);
 function setHdrUpdated(t){
   const e=document.getElementById('hdr-updated');
   if(e) e.textContent='обновлено '+t;
+}
+
+/* ── «Статистика» ──────────────────────────────────────────────────────────
+ * История набора по дням: воронка, два графика, таблица по объектам.
+ *
+ * Считается только с 19.08.2026 — с этого дня живёт файл провожаний 2.0.
+ * Старую историю (лист СМЕНЫ до 10 августа) не берём: она собрана другим
+ * способом и из другого файла, а склеенные в один график два разных способа
+ * счёта дают линию, которой нельзя верить.
+ *
+ * Данные — готовый лист «ИТОГИ ДНЯ», его пишет раз в сутки itogi_dnya.py.
+ * Дневные листы при каждом открытии не читаем: их уже семь, к зиме будет
+ * полторы сотни.
+ *
+ * Графики рисуются руками, прямоугольниками. Библиотеку сюда не тащим: она
+ * весит больше всей страницы и через год ломается сама по себе. */
+const STAT_URL='https://baza.rezervsil.ru/.netlify/functions/statistika';
+let СТАТ=null, СТАТ_ПЕРИОД=7, СТАТ_ОБЪЕКТ='';
+
+function statStop(){}
+
+async function statStart(){
+  const app=document.getElementById('app');
+  document.getElementById('filters').innerHTML='';
+  if(!СТАТ){
+    app.innerHTML='<div class="err">Загружаю историю…</div>';
+    try{
+      const r=await fetch(STAT_URL,{cache:'no-store'});
+      const j=await r.json();
+      if(j.ошибка) throw new Error(j.ошибка);
+      СТАТ=j;
+    }catch(e){
+      app.innerHTML='<div class="err">История сейчас недоступна. '+
+        '<span class="dim">Она живёт на сервере базы: если он не отвечает, '+
+        'остальные вкладки всё равно работают — они на данных из самой страницы.</span></div>';
+      return;
+    }
+  }
+  statDraw();
+}
+
+const статКлюч=(д)=>Number(д.slice(3,5))*100+Number(д.slice(0,2));
+
+function статРяды(){
+  let ряды=СТАТ_ОБЪЕКТ?СТАТ.дни.filter(з=>з.объект===СТАТ_ОБЪЕКТ):СТАТ.дни;
+  if(!СТАТ_ПЕРИОД) return ряды;
+  const дни=[...new Set(ряды.map(з=>з.дата))].sort((a,b)=>статКлюч(a)-статКлюч(b)).slice(-СТАТ_ПЕРИОД);
+  return ряды.filter(з=>дни.includes(з.дата));
+}
+
+function статПоДням(ряды){
+  const карта=new Map();
+  for(const з of ряды){
+    const б=карта.get(з.дата)||{метка:з.дата,нужно:0,набрано:0,вышло:0,смз:0,невышли:0};
+    for(const к of ['нужно','набрано','вышло','смз','невышли']) б[к]+=з[к];
+    карта.set(з.дата,б);
+  }
+  return [...карта.values()].sort((a,b)=>статКлюч(a.метка)-статКлюч(b.метка));
+}
+
+/* Воронка: полосы одна под другой, длина — доля от самой большой ступени.
+   Рядом с цифрой — сколько это от предыдущей ступени: без процента полосы
+   красивые, но не говорят, где именно просело. */
+function статВоронка(ступени){
+  const предел=Math.max(1,...ступени.map(с=>с.сколько));
+  return ступени.map((с,i)=>{
+    const доля=Math.max(7,Math.round(с.сколько/предел*100));
+    const пред=i?ступени[i-1].сколько:0;
+    const хвост=i&&пред?Math.round(с.сколько/пред*100)+'% от предыдущей':(с.хвост||'');
+    return '<div class="ступень"><div class="имя">'+с.имя+'</div>'+
+      '<div><span class="полоса" style="width:'+доля+'%;background:'+с.цвет+'">'+с.сколько+'</span>'+
+      '<span class="рядом">'+хвост+'</span></div></div>';
+  }).join('');
+}
+
+/* Столбики: слои складываются снизу вверх и в сумме дают целое.
+ *
+ * Подписан КАЖДЫЙ слой, а не только вершина: Анна 24.08.2026 — «давай все
+ * цифры подписывай». Если слой слишком тонкий и цифра в него не влезает, она
+ * не рисуется вовсе: подпись поверх соседнего слоя врёт хуже, чем её
+ * отсутствие. Такие значения всё равно видны в подсказке при наведении. */
+function статСтолбики(ряды,слои){
+  if(!ряды.length) return '<div class="empty">За этот период данных нет</div>';
+  const H=190, шаг=Math.max(44,Math.min(96,760/ряды.length));
+  const итог=р=>слои.reduce((s,сл)=>s+(р[сл.ключ]||0),0);
+  const предел=Math.max(1,...ряды.map(итог));
+  let сетка='';
+  for(let k=0;k<=4;k++){
+    const y=20+H-H*k/4;
+    сетка+='<line x1="42" y1="'+y+'" x2="'+(шаг*ряды.length+50)+'" y2="'+y+'" stroke="var(--line)"/>'+
+      '<text x="36" y="'+(y+4)+'" text-anchor="end" font-size="10" fill="var(--muted)">'+Math.round(предел*k/4)+'</text>';
+  }
+  const палки=ряды.map((р,i)=>{
+    const x=52+i*шаг, ш=шаг-14;
+    let низ=20+H, куски='';
+    for(const сл of слои){
+      const v=р[сл.ключ]||0, в=Math.round(v/предел*H);
+      if(!в) continue;
+      низ-=в;
+      куски+='<rect x="'+x+'" y="'+низ+'" width="'+ш+'" height="'+в+'" rx="3" fill="'+сл.цвет+'">'+
+        '<title>'+р.метка+' · '+сл.имя+': '+v+'</title></rect>';
+      if(в>=16) куски+='<text x="'+(x+ш/2)+'" y="'+(низ+в/2+4)+'" text-anchor="middle" '+
+        'font-size="11" font-weight="700" fill="'+(сл.тёмный?'#fff':'var(--ink)')+'">'+v+'</text>';
+    }
+    return куски+'<text x="'+(x+ш/2)+'" y="'+(низ-6)+'" text-anchor="middle" font-size="12" '+
+      'font-weight="700" fill="var(--ink)">'+(итог(р)||'')+'</text>'+
+      '<text x="'+(x+ш/2)+'" y="'+(H+40)+'" text-anchor="middle" font-size="11" fill="var(--muted)">'+р.метка+'</text>';
+  }).join('');
+  const ш=шаг*ряды.length+60;
+  return '<div class="scroll"><svg viewBox="0 0 '+ш+' '+(H+52)+'" width="100%" style="max-width:'+ш+'px">'+сетка+палки+'</svg></div>';
+}
+
+function statDraw(){
+  const ряды=статРяды(), дни=статПоДням(ряды);
+  const сумма=к=>ряды.reduce((s,з)=>s+з[к],0);
+  for(const д of дни) д.несмз=д.вышло-д.смз;
+  const объекты=[...new Set(СТАТ.дни.map(з=>з.объект))].sort((a,b)=>a.localeCompare(b,'ru'));
+
+  const кнопки=[[7,'неделя'],[30,'месяц'],[0,'всё время']].map(([n,и])=>
+    '<button class="btn-podbor'+(n===СТАТ_ПЕРИОД?' on':'')+'" onclick="СТАТ_ПЕРИОД='+n+';statDraw()">'+и+'</button>').join('');
+  const выбор='<select class="sel" onchange="СТАТ_ОБЪЕКТ=this.value;statDraw()">'+
+    '<option value="">все объекты</option>'+
+    объекты.map(о=>'<option'+(о===СТАТ_ОБЪЕКТ?' selected':'')+'>'+о+'</option>').join('')+'</select>';
+
+  const поОбъектам=new Map();
+  for(const з of ряды){
+    const б=поОбъектам.get(з.объект)||{нужно:0,набрано:0,вышло:0,смз:0,невышли:0};
+    for(const к of ['нужно','набрано','вышло','смз','невышли']) б[к]+=з[к];
+    поОбъектам.set(з.объект,б);
+  }
+
+  document.getElementById('app').innerHTML=
+    '<div class="стат-ряд"><span class="dim">период:</span>'+кнопки+
+      '<span class="dim" style="margin-left:.5rem">объект:</span>'+выбор+'</div>'+
+    '<div class="card"><h3>Воронка за период</h3>'+
+      '<p class="поясн">Каждая следующая цифра берётся из предыдущей: из набранных вышли, '+
+      'из вышедших — самозанятые. Вышедшими считаются все, кроме крестика и отмены.</p>'+
+      статВоронка([
+        {имя:'нужно клиентам',сколько:сумма('нужно'),цвет:'#8b95ad',хвост:дни.length+' дн.'},
+        {имя:'набрано',сколько:сумма('набрано'),цвет:'#0e8fd0'},
+        {имя:'вышло',сколько:сумма('вышло'),цвет:'#1f8f6d'},
+        {имя:'из них самозанятых',сколько:сумма('смз'),цвет:'#1a1560'}])+
+    '</div>'+
+    '<div class="card"><h3>Набор и выход по дням</h3>'+
+      '<p class="поясн">Столбик — сколько набрали на день.</p>'+
+      статСтолбики(дни,[{ключ:'вышло',цвет:'#1f8f6d',имя:'вышли',тёмный:true},
+                        {ключ:'невышли',цвет:'#b23a4b',имя:'не вышли',тёмный:true}])+
+      '<div class="легенда"><span><i style="background:#1f8f6d"></i>вышли</span>'+
+      '<span><i style="background:#b23a4b"></i>не вышли</span></div></div>'+
+    '<div class="card"><h3>Самозанятые среди вышедших</h3>'+
+      '<p class="поясн">Столбик — сколько вышло в этот день.</p>'+
+      статСтолбики(дни,[{ключ:'смз',цвет:'#1a1560',имя:'самозанятые',тёмный:true},
+                        {ключ:'несмз',цвет:'#5bb8e6',имя:'остальные'}])+
+      '<div class="легенда"><span><i style="background:#1a1560"></i>самозанятые</span>'+
+      '<span><i style="background:#5bb8e6"></i>остальные</span></div></div>'+
+    '<div class="card"><h3>По объектам за период</h3>'+
+      '<div class="scroll"><table><thead><tr><th>Объект</th><th>Нужно</th><th>Набрано</th>'+
+      '<th>Вышло</th><th>Из них СМЗ</th><th>Не вышли</th></tr></thead><tbody>'+
+      ([...поОбъектам.entries()].sort((a,b)=>b[1].набрано-a[1].набрано).map(([имя,б])=>
+        '<tr><td>'+имя+'</td><td>'+б.нужно+'</td><td>'+б.набрано+'</td><td>'+б.вышло+
+        '</td><td>'+б.смз+'</td><td>'+б.невышли+'</td></tr>').join('')||
+        '<tr><td colspan="6" class="empty">Нет данных</td></tr>')+
+      '</tbody></table></div></div>';
+  setHdrUpdated(СТАТ.обновлено||'');
 }
 
 /* ── «Подбор» ──────────────────────────────────────────────────────────────
