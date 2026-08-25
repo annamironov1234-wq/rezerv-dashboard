@@ -79,6 +79,20 @@
   .btn-podbor:hover{background:var(--blue);color:#fff}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem;margin-bottom:1rem}
   .kpis-3{grid-template-columns:repeat(3,1fr)}
+  /* Компактный ряд плиток для «Набора». Анна 25.08.2026: «очень крупно, четыре
+     квадратика слишком много». Две колонки даже на телефоне, первая плитка на
+     всю ширину — в ней самая длинная строка «нужно / набрано». */
+  .kpis.компакт{grid-template-columns:1fr 1fr;gap:.5rem}
+  .kpis.компакт .kpi{padding:.5rem .7rem}
+  .kpis.компакт .kpi .val{font-size:1.45rem}
+  .kpis.компакт .kpi.широкая{grid-column:1 / -1}
+  .kpis.компакт .kpi.широкая .val{font-size:1.8rem}
+  /* Разница «набрано минус нужно»: словами «не хватает» больше не пишем —
+     знак и цвет читаются раньше, чем слово. */
+  .разн{font-weight:800}
+  .разн.плюс{color:var(--good)}
+  .разн.минус{color:var(--crimson)}
+  .нр{white-space:nowrap}
   /* Статистика: воронка ступенями и столбики с подписями. */
   .ступень{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center;margin-bottom:8px}
   .ступень .имя{font-size:.85rem;color:var(--ink-2);text-align:right}
@@ -92,7 +106,7 @@
   .легенда i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
   .поясн{font-size:.8rem;color:var(--muted);margin:.1rem 0 .7rem}
   @media(max-width:780px){.kpis{grid-template-columns:repeat(2,1fr)}}
-  @media(max-width:460px){.kpis{grid-template-columns:1fr}}
+  @media(max-width:460px){.kpis{grid-template-columns:1fr}.kpis.компакт{grid-template-columns:1fr 1fr}}
   .kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:.8rem .9rem;position:relative;overflow:hidden}
   .kpi.accent{border-color:var(--blue)}
   .kpi.accent::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--blue)}
@@ -1415,18 +1429,34 @@ function podborShift(дней){
   return String(базовая.getDate()).padStart(2,'0')+'.'+String(базовая.getMonth()+1).padStart(2,'0');
 }
 
-// Менеджеры набирают с утра уже на завтра — открытая по умолчанию дата
-// должна быть завтрашней (по московскому времени, не по часовому поясу
-// браузера), иначе первый экран показывает уже закрытый вчерашний день.
-function podborDefaultDate(){
+/* По умолчанию открывается СЕГОДНЯ — Анна 25.08.2026.
+ *
+ * До этого открывалось завтра: менеджеры набирают с утра уже на следующий
+ * день. Но дашборд смотрит не менеджер, а собственник, и ему первым делом
+ * нужно, что происходит прямо сейчас. Завтра — одно нажатие вправо.
+ *
+ * Считаем по московскому времени, а не по часовому поясу браузера: телефон в
+ * поездке иначе показывал бы чужой день.
+ */
+function podborМСК(сдвиг){
   const мск = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/Moscow'}));
-  мск.setDate(мск.getDate()+1);
+  мск.setDate(мск.getDate()+сдвиг);
   return String(мск.getDate()).padStart(2,'0')+'.'+String(мск.getMonth()+1).padStart(2,'0');
 }
+function podborDefaultDate(){ return podborМСК(0); }
 
 let podborReq=0;      // счётчик запросов: пока этот fetch летал, могли уйти с вкладки или переключить дату ещё раз
 let podborОткат=false; // уже откатились с «завтра» на «сегодня» — второй раз не пробуем
 const podborОткрытые=new Set(); // какие объекты раскрыты: переживает перерисовку раз в минуту
+
+/* «нужно / набрано (разница)» — один вид и в плитке, и в строке таблицы, и
+   в мордочке. Анна 25.08.2026: «первая цифра нужно, вторая набрано, и в
+   скобочках +1 зелёным, а если не хватает — минус девять красным». */
+function пара(нужно,набрано){
+  const d=(набрано||0)-(нужно||0);
+  const знак=d===0?'':' <span class="разн '+(d>0?'плюс':'минус')+'">'+(d>0?'+':'−')+Math.abs(d)+'</span>';
+  return '<span class="нр">'+(нужно||0)+' / '+(набрано||0)+знак+'</span>';
+}
 
 /* Переключатель «день · неделя». Рисуется во всех состояниях вкладки, включая
    ошибку: иначе из дня, на который нет листа, некуда уйти. */
@@ -1485,26 +1515,30 @@ async function podborНеделяLoad(){
     app.innerHTML=podborПереключатель()+'<div class="empty">Истории пока нет</div>';
     return;
   }
-  const kpi=(lab,val,sub,acc)=>'<div class="kpi'+(acc?' accent':'')+'"><div class="lab">'+lab+
-    '</div><div class="val">'+val+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
+  const kpi=(lab,val,sub,acc,широкая)=>'<div class="kpi'+(acc?' accent':'')+(широкая?' широкая':'')+
+    '"><div class="lab">'+lab+'</div><div class="val">'+val+'</div>'+
+    (sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
   const эк=x=>String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   app.innerHTML=
     podborПереключатель()+
     '<p class="dim" style="margin:.2rem 0 .8rem">'+н.дни.length+' дн.: '+
       эк(н.дни[0])+' — '+эк(н.дни[н.дни.length-1])+'</p>'+
-    '<div class="kpis">'+
-      kpi('объектов',н.объекты.length,'за неделю',true)+
-      kpi('нужно людей',н.нужно)+
-      kpi('набрано',н.набрано,н.нужно?Math.round(н.набрано/н.нужно*100)+'% от нужного':'')+
+    '<div class="kpis компакт">'+
+      kpi('нужно / набрано',пара(н.нужно,н.набрано),
+          н.нужно?'закрыто '+Math.round(Math.min(1,н.набрано/н.нужно)*100)+'%':'',true,true)+
       kpi('вышло',н.вышло,н.невышли?'не вышли '+н.невышли:'')+
-      kpi('из них самозанятых',н.смз,н.вышло?Math.round(н.смз/н.вышло*100)+'% от вышедших':'')+
+      kpi('самозанятых',н.смз,н.вышло?Math.round(н.смз/н.вышло*100)+'% от вышедших':'')+
     '</div>'+
-    '<div class="scroll"><table><thead><tr><th>Объект</th><th>Нужно</th><th>Набрано</th>'+
-      '<th>Вышло</th><th>Из них СМЗ</th><th>Не вышли</th></tr></thead><tbody>'+
+    /* Четыре столбца, а не пять: «не вышли» стоят прямо у «вышло» красным
+       минусом — на телефоне пятый столбец уезжал за край и его не видели. */
+    '<div class="scroll"><table><thead><tr><th>Объект</th><th>Нужно / набрано</th>'+
+      '<th>Вышло</th><th>СМЗ</th></tr></thead><tbody>'+
       (н.объекты.map(о=>'<tr'+(о.невышли?' style="background:#fff3e0"':'')+'><td>'+эк(о.место)+
-        '</td><td>'+о.нужно+'</td><td>'+о.набрано+'</td><td>'+о.вышло+
-        '</td><td>'+о.смз+'</td><td>'+о.невышли+'</td></tr>').join('')||
-        '<tr><td colspan="6" class="empty">Нет данных</td></tr>')+
+        '</td><td>'+пара(о.нужно,о.набрано)+
+        '</td><td><span class="нр">'+о.вышло+
+        (о.невышли?' <span class="разн минус">−'+о.невышли+'</span>':'')+'</span>'+
+        '</td><td>'+о.смз+'</td></tr>').join('')||
+        '<tr><td colspan="4" class="empty">Нет данных</td></tr>')+
     '</tbody></table></div>';
   setHdrUpdated(н.дни[н.дни.length-1]+' (неделя)');
 }
@@ -1537,7 +1571,10 @@ async function podborLoad(){
     // на завтра». Показывать собственнику красную ошибку первым экраном
     // нельзя: 21.08.2026 Дмитрий открывал дашборд и видел «Лист на эту дату
     // не создан» вместо цифр. Молча откатываемся на сегодня и говорим об этом.
-    if(!podborОткат && podborDate===podborDefaultDate()){
+    // Откатываемся только с завтрашнего дня: его лист заводят накануне, и
+    // «ещё не создан» там норма. Если листа нет на сегодня — это уже новость,
+    // и молча подсовывать вчерашний день нельзя.
+    if(!podborОткат && podborDate===podborМСК(1)){
       podborОткат=true;
       podborDate=podborShift(-1);
       return podborLoad();
@@ -1574,16 +1611,17 @@ function podborРисовать(app, d, пометка){
       (люди.length?' onclick="podborРаскрыть('+i+')"':'')+
       (o.неХватает>0?' style="background:#fff3e0"':'')+'>'+
       '<td>'+(люди.length?'<span class="стрелка" id="стрелка'+i+'">▸</span> ':'')+эк(o.место)+'</td>'+
-      '<td>'+o.нужно+'</td><td>'+o.набрано+'</td>'+
-      '<td>'+o.неХватает+'</td><td>'+o.закрытоТекст+'</td><td>'+(o.резерв||'')+'</td></tr>';
+      '<td>'+пара(o.нужно,o.набрано)+'</td>'+
+      '<td>'+(o.смз===null||o.смз===undefined?'—':o.смз)+'</td>'+
+      '<td>'+(o.резерв||'')+'</td></tr>';
     const раскрытие=люди.length
-      ? '<tr class="люди" id="люди'+i+'" style="display:none"><td colspan="6">'+
+      ? '<tr class="люди" id="люди'+i+'" style="display:none"><td colspan="4">'+
           люди.map(человек).join('')+'</td></tr>'
       : '';
     return шапкаСтроки+раскрытие;
   };
 
-  const kpi=(lab,val,sub,acc)=>'<div class="kpi'+(acc?' accent':'')+'"><div class="lab">'+lab+'</div><div class="val">'+val+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
+  const kpi=(lab,val,sub,acc,широкая)=>'<div class="kpi'+(acc?' accent':'')+(широкая?' широкая':'')+'"><div class="lab">'+lab+'</div><div class="val">'+val+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
   app.innerHTML =
     podborПереключатель()+
     '<div class="podbor-top">'+
@@ -1594,14 +1632,14 @@ function podborРисовать(app, d, пометка){
       '</div>'+
     '</div>'+
     (пометка?'<p class="warn-inline">'+пометка+'</p>':'')+
-    '<div class="kpis">'+
-      kpi('объектов', d.объектовРаботает, d.объектовБезЗаказа?d.объектовБезЗаказа+' без заказа':'', true)+
-      kpi('нужно людей', d.нужно)+
-      kpi('набрано / осталось', d.набрано+' / '+d.осталосьНайти, 'закрыто '+d.закрытоТекст)+
+    '<div class="kpis компакт">'+
+      kpi('нужно / набрано', пара(d.нужно,d.набрано),
+          d.закрытоТекст?'закрыто '+d.закрытоТекст:'', true, true)+
+      kpi('объектов', d.объектовРаботает, d.объектовБезЗаказа?d.объектовБезЗаказа+' без заказа':'')+
       /* Самозанятые — из набранных, по значку СМЗ в листе. За прошлые дни
          цифры нет: в «ИТОГАХ ДНЯ» лежат только количества, поимённого
          списка там не осталось. Тогда честнее прочерк, чем ноль. */
-      kpi('из них самозанятых', d.смз===null||d.смз===undefined?'—':d.смз,
+      kpi('самозанятых', d.смз===null||d.смз===undefined?'—':d.смз,
           d.смз===null||d.смз===undefined?'за прошлые дни не считается'
             :(d.набрано?Math.round(d.смз/d.набрано*100)+'% от набранных':''))+
     '</div>'+
@@ -1609,7 +1647,7 @@ function podborРисовать(app, d, пометка){
     (d.итогСверяется?'<p class="err">итог сверяется</p>':'')+
     (d.изАрхива?'<p><i>данные из истории, не сегодняшние живые</i></p>':'')+
     '<div class="scroll"><table><thead><tr>'+
-      '<th>Объект</th><th>Нужно</th><th>Набрано</th><th>Не хватает</th><th>Закрыто</th><th>Резерв</th>'+
+      '<th>Объект</th><th>Нужно / набрано</th><th>СМЗ</th><th>Резерв</th>'+
     '</tr></thead><tbody>'+(d.объекты||[]).map(строка).join('')+'</tbody></table></div>';
   podborВернутьРаскрытые();
 }
