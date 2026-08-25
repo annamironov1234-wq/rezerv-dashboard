@@ -84,12 +84,13 @@
      всю ширину — в ней самая длинная строка «нужно / набрано». */
   .kpis.компакт{grid-template-columns:1fr 1fr;gap:.5rem}
   .kpis.компакт .kpi{padding:.5rem .7rem}
-  .kpis.компакт .kpi .val{font-size:1.45rem}
+  .kpis.компакт .kpi .val{font-size:1.3rem}
   .kpis.компакт .kpi.широкая{grid-column:1 / -1}
-  .kpis.компакт .kpi.широкая .val{font-size:1.8rem}
+  .kpis.компакт .kpi.широкая .val{font-size:1.6rem}
   /* Разница «набрано минус нужно»: словами «не хватает» больше не пишем —
      знак и цвет читаются раньше, чем слово. */
-  .разн{font-weight:800}
+  /* Разница мельче самих цифр: она уточняет пару, а не спорит с ней. */
+  .разн{font-weight:800;font-size:.82em}
   .разн.плюс{color:var(--good)}
   .разн.минус{color:var(--crimson)}
   .нр{white-space:nowrap}
@@ -1454,7 +1455,7 @@ const podborОткрытые=new Set(); // какие объекты раскр�
    скобочках +1 зелёным, а если не хватает — минус девять красным». */
 function пара(нужно,набрано){
   const d=(набрано||0)-(нужно||0);
-  const знак=d===0?'':' <span class="разн '+(d>0?'плюс':'минус')+'">'+(d>0?'+':'−')+Math.abs(d)+'</span>';
+  const знак=d===0?'':' <span class="разн '+(d>0?'плюс':'минус')+'">('+(d>0?'+':'−')+Math.abs(d)+')</span>';
   return '<span class="нр">'+(нужно||0)+' / '+(набрано||0)+знак+'</span>';
 }
 
@@ -1536,7 +1537,7 @@ async function podborНеделяLoad(){
       (н.объекты.map(о=>'<tr'+(о.невышли?' style="background:#fff3e0"':'')+'><td>'+эк(о.место)+
         '</td><td>'+пара(о.нужно,о.набрано)+
         '</td><td><span class="нр">'+о.вышло+
-        (о.невышли?' <span class="разн минус">−'+о.невышли+'</span>':'')+'</span>'+
+        (о.невышли?' <span class="разн минус">(−'+о.невышли+')</span>':'')+'</span>'+
         '</td><td>'+о.смз+'</td></tr>').join('')||
         '<tr><td colspan="4" class="empty">Нет данных</td></tr>')+
     '</tbody></table></div>';
