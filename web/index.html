@@ -57,7 +57,8 @@
   .warn-inline{background:#fff4d6;color:#7a5b00;border:1px solid #ffe08a;border-radius:5px;padding:.1rem .5rem;font-weight:700;font-size:.7rem}
   .warn{background:#fff4d6;color:#7a5b00;border:1px solid #ffe08a;border-radius:6px;padding:.4rem .7rem;font-weight:600}
   .podbor-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.9rem}
-  .podbor-nav{display:flex;align-items:center;gap:.7rem}
+  .podbor-режим{display:flex;gap:.4rem;margin:0 0 .6rem}
+.podbor-nav{display:flex;align-items:center;gap:.7rem}
   .podbor-date{font-size:1.05rem;font-weight:800;color:var(--deep)}
   /* список людей объекта — раскрывается нажатием на строку */
   tr.кликабельный{cursor:pointer}
@@ -1210,17 +1211,25 @@ let СТАТ=null, СТАТ_ПЕРИОД=7, СТАТ_ОБЪЕКТ='';
 
 function statStop(){}
 
+/* История нужна двум вкладкам: «Статистике» и «Набору» в режиме недели.
+   Держим её в одном месте — две копии одних цифр однажды разойдутся. */
+async function статЗагрузить(){
+  if(СТАТ) return true;
+  try{
+    const r=await fetch(STAT_URL,{cache:'no-store'});
+    const j=await r.json();
+    if(j.ошибка) throw new Error(j.ошибка);
+    СТАТ=j;
+    return true;
+  }catch(e){ return false; }
+}
+
 async function statStart(){
   const app=document.getElementById('app');
   document.getElementById('filters').innerHTML='';
   if(!СТАТ){
     app.innerHTML='<div class="err">Загружаю историю…</div>';
-    try{
-      const r=await fetch(STAT_URL,{cache:'no-store'});
-      const j=await r.json();
-      if(j.ошибка) throw new Error(j.ошибка);
-      СТАТ=j;
-    }catch(e){
+    if(!await статЗагрузить()){
       app.innerHTML='<div class="err">История сейчас недоступна. '+
         '<span class="dim">Она живёт на сервере базы: если он не отвечает, '+
         'остальные вкладки всё равно работают — они на данных из самой страницы.</span></div>';
@@ -1369,6 +1378,10 @@ function statDraw(){
  * вкладки — они как были на baked-данных, так и остаются. */
 const PODBOR_URL='https://baza.rezervsil.ru/.netlify/functions/podbor';
 let podborTimer=null, podborDate=null; // null = сегодня
+/* День или неделя. Анна 25.08.2026: «дни оставить, добавить неделю» — один
+   день говорит, кого не хватает прямо сейчас, а неделя показывает, тянется
+   ли это который день подряд. Режим держится, пока открыта страница. */
+let podborРежим='день';
 
 function podborStop(){ if(podborTimer){ clearInterval(podborTimer); podborTimer=null; } }
 
@@ -1385,7 +1398,8 @@ function podborИзЗапаса(app){
   const з = DATA && DATA.podbor_snapshot;
   const дни = з && з.дни;
   if(!дни || !Object.keys(дни).length){
-    app.innerHTML='<div class="err">Данные подбора сейчас недоступны</div>';
+    app.innerHTML=podborПереключатель()+
+      '<div class="err">Данные подбора сейчас недоступны</div>';
     return;
   }
   // Берём запрошенный день; нет его — самый свежий из того, что сняли.
@@ -1414,7 +1428,89 @@ let podborReq=0;      // счётчик запросов: пока этот fetc
 let podborОткат=false; // уже откатились с «завтра» на «сегодня» — второй раз не пробуем
 const podborОткрытые=new Set(); // какие объекты раскрыты: переживает перерисовку раз в минуту
 
+/* Переключатель «день · неделя». Рисуется во всех состояниях вкладки, включая
+   ошибку: иначе из дня, на который нет листа, некуда уйти. */
+function podborПереключатель(){
+  return '<div class="podbor-режим">'+
+    [['день','день'],['неделя','неделя']].map(([к,и])=>
+      '<button class="btn-podbor'+(к===podborРежим?' on':'')+
+      '" onclick="podborПереключить(\''+к+'\')">'+и+'</button>').join('')+
+    '</div>';
+}
+
+function podborПереключить(режим){
+  if(режим===podborРежим) return;
+  podborРежим=режим;
+  document.getElementById('app').innerHTML='<div class="err">Загрузка…</div>';
+  podborLoad();
+}
+
+/* Неделя набора: те же цифры, что в «Статистике», но показанные так же, как
+   день — плитками и таблицей по объектам. Считаются из «ИТОГОВ ДНЯ», поэтому
+   тут есть «вышло», которого у дня нет: выход проставляют вечером.
+   Неделя — семь последних дней, за которые вообще есть история. */
+function podborНеделяДанные(){
+  const все=[...new Set(СТАТ.дни.map(з=>з.дата))].sort((a,b)=>статКлюч(a)-статКлюч(b));
+  const дни=все.slice(-7);
+  const ряды=СТАТ.дни.filter(з=>дни.includes(з.дата));
+  const поОбъектам=new Map();
+  for(const з of ряды){
+    const б=поОбъектам.get(з.объект)||{место:з.объект,нужно:0,набрано:0,вышло:0,смз:0,невышли:0};
+    for(const к of ['нужно','набрано','вышло','смз','невышли']) б[к]+=з[к];
+    поОбъектам.set(з.объект,б);
+  }
+  const объекты=[...поОбъектам.values()].sort((a,b)=>b.набрано-a.набрано);
+  const сумма=к=>объекты.reduce((s,о)=>s+о[к],0);
+  return {
+    дни, объекты,
+    нужно:сумма('нужно'), набрано:сумма('набрано'),
+    вышло:сумма('вышло'), смз:сумма('смз'), невышли:сумма('невышли'),
+  };
+}
+
+async function podborНеделяLoad(){
+  const req=++podborReq;
+  const app=document.getElementById('app');
+  if(!await статЗагрузить()){
+    if(req!==podborReq || PAGE!=='podbor') return;
+    app.innerHTML=podborПереключатель()+
+      '<div class="err">История сейчас недоступна. '+
+      '<span class="dim">Она живёт на сервере базы. День при этом может '+
+      'открываться: он читается оттуда же, но другим запросом.</span></div>';
+    return;
+  }
+  if(req!==podborReq || PAGE!=='podbor') return;
+  const н=podborНеделяДанные();
+  if(!н.дни.length){
+    app.innerHTML=podborПереключатель()+'<div class="empty">Истории пока нет</div>';
+    return;
+  }
+  const kpi=(lab,val,sub,acc)=>'<div class="kpi'+(acc?' accent':'')+'"><div class="lab">'+lab+
+    '</div><div class="val">'+val+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
+  const эк=x=>String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  app.innerHTML=
+    podborПереключатель()+
+    '<p class="dim" style="margin:.2rem 0 .8rem">'+н.дни.length+' дн.: '+
+      эк(н.дни[0])+' — '+эк(н.дни[н.дни.length-1])+'</p>'+
+    '<div class="kpis">'+
+      kpi('объектов',н.объекты.length,'за неделю',true)+
+      kpi('нужно людей',н.нужно)+
+      kpi('набрано',н.набрано,н.нужно?Math.round(н.набрано/н.нужно*100)+'% от нужного':'')+
+      kpi('вышло',н.вышло,н.невышли?'не вышли '+н.невышли:'')+
+      kpi('из них самозанятых',н.смз,н.вышло?Math.round(н.смз/н.вышло*100)+'% от вышедших':'')+
+    '</div>'+
+    '<div class="scroll"><table><thead><tr><th>Объект</th><th>Нужно</th><th>Набрано</th>'+
+      '<th>Вышло</th><th>Из них СМЗ</th><th>Не вышли</th></tr></thead><tbody>'+
+      (н.объекты.map(о=>'<tr'+(о.невышли?' style="background:#fff3e0"':'')+'><td>'+эк(о.место)+
+        '</td><td>'+о.нужно+'</td><td>'+о.набрано+'</td><td>'+о.вышло+
+        '</td><td>'+о.смз+'</td><td>'+о.невышли+'</td></tr>').join('')||
+        '<tr><td colspan="6" class="empty">Нет данных</td></tr>')+
+    '</tbody></table></div>';
+  setHdrUpdated(н.дни[н.дни.length-1]+' (неделя)');
+}
+
 async function podborLoad(){
+  if(podborРежим==='неделя') return podborНеделяLoad();
   const req=++podborReq;
   const app=document.getElementById('app');
   const qs = podborDate ? ('?дата='+encodeURIComponent(podborDate)) : '';
@@ -1446,7 +1542,7 @@ async function podborLoad(){
       podborDate=podborShift(-1);
       return podborLoad();
     }
-    app.innerHTML='<div class="err">'+d.ошибка+'</div>';
+    app.innerHTML=podborПереключатель()+'<div class="err">'+d.ошибка+'</div>';
     setHdrUpdated(DATA&&DATA.updated_at?DATA.updated_at:'—');
     return;
   }
@@ -1489,6 +1585,7 @@ function podborРисовать(app, d, пометка){
 
   const kpi=(lab,val,sub,acc)=>'<div class="kpi'+(acc?' accent':'')+'"><div class="lab">'+lab+'</div><div class="val">'+val+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
   app.innerHTML =
+    podborПереключатель()+
     '<div class="podbor-top">'+
       '<div class="podbor-nav">'+
         (пометка?'':'<button class="btn-podbor" onclick="podborDate=podborShift(-1);podborLoad()">‹</button>')+
