@@ -1,12 +1,19 @@
 """Мелкие помощники: чтение заголовков по имени, нормализация месяца."""
 import datetime as _dt
+from pathlib import Path
 import openpyxl, warnings
 warnings.simplefilter("ignore")
 
 
 def load(path, sheet, data_only=True):
+    """sheet: имя листа или кортеж имён (на случай переименования в таблице)."""
     wb = openpyxl.load_workbook(path, data_only=data_only, read_only=False)
-    return wb[sheet]
+    names = (sheet,) if isinstance(sheet, str) else tuple(sheet)
+    for n in names:
+        if n in wb.sheetnames:
+            return wb[n]
+    raise KeyError(f"В файле {Path(path).name} нет листа {' / '.join(names)}. "
+                   f"Скорее всего, лист переименовали. Есть листы: {', '.join(wb.sheetnames)}")
 
 
 def header_index(ws, header_row=1):
