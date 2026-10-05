@@ -162,8 +162,10 @@ def main():
     rev_by_obj, rev_obj_monthly = [], {}
     months = p.months
     for o, mm in inc.rev_obj_month.items():
+        # total = янв–июн (контроль и график «по клиентам»); в список попадают и клиенты,
+        # пришедшие позже: иначе их не видно в разрезе по объектам (Гранд Лайн, ПеноФом).
         t = sum(v for m, v in mm.items() if "2026-01" <= m <= "2026-06")
-        if t:
+        if t or any(mm.get(m) for m in months):
             rev_by_obj.append({"obj": o, "total": t, "ip": C.ip_of(o)})
             rev_obj_monthly[o] = {m: mm.get(m, 0.0) for m in months}
     rev_by_obj.sort(key=lambda x: -x["total"])

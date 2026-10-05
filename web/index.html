@@ -1128,6 +1128,7 @@ function buildClientChart(list){
   const card=el('div','card');
   card.append(el('div','hd','<h2>Выручка по клиентам</h2><span class="note">тыс ₽ · янв–июн</span>'));
   const w=el('div','chartwrap');
+  list=list.filter(r=>r.total>0);
   const max=Math.max(...list.map(r=>r.total),1);
   const short=o=>o.replace(/\s*\(\d+\).*$/,'').replace(/^ООО\s+|^OOO\s+/,'').trim();
   const wrap=el('div'); wrap.style.cssText='display:flex;flex-direction:column;gap:.5rem';
